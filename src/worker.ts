@@ -10,7 +10,7 @@ import { tokenCount } from './transcript'
 const sources = { listChats, focusedChat, nativeContext, nativeTurn, providerRate, geminiUsage, resolveChat, findTranscript, makeTail: (path: string, id: string) => new TranscriptTail(path, id) }
 export type Sources = Omit<typeof sources, 'makeTail'> & { makeTail: (path: string, id: string) => Pick<TranscriptTail, 'read'> }
 
-export function start(orca: OrcaWorkerApi, source: Sources, pollMs = 2000): () => void {
+export function start(orca: OrcaWorkerApi, source: Sources, pollMs = 300, clock = () => performance.now()): () => void {
   let disposed = false
   let selected: string | null = null
   let previousWorkspace: string | null = null
@@ -19,15 +19,35 @@ export function start(orca: OrcaWorkerApi, source: Sources, pollMs = 2000): () =
   let timer: ReturnType<typeof setInterval> | undefined
   let tail: { identity: string; reader: Pick<TranscriptTail, 'read'> } | null = null
   let publishedStatus = ''
+  let roster: { workspace: string; chats: Snapshot['chats']; until: number } | null = null
+  let rosterRefresh: Promise<void> | null = null
+  let preferences = { locale: emptySnapshot.locale, windowTokens: null as number | null, until: 0 }
+  let metricsUntil = 0
 
   const read = async (): Promise<Snapshot> => {
-    const settings = await orca.host.call('settings.get').catch(() => null)
-    const next: Snapshot = { ...emptySnapshot, phase: 'unavailable', locale: resolveLocale(settings?.settings.language) }
+    const next: Snapshot = { ...emptySnapshot, phase: 'unavailable' }
+    if (pollMs === 0 || clock() >= preferences.until) {
+      const settings = await orca.host.call('settings.get').catch(() => null)
+      preferences = { locale: resolveLocale(settings?.settings.language), windowTokens: tokenCount(settings?.settings.contextWindowTokens) || null, until: clock() + 2000 }
+    }
+    next.locale = preferences.locale
     try {
       const context = await orca.host.call('workspace.readContext')
       const workspace = context?.workspaceId ?? null
-      if (workspace !== previousWorkspace) { selected = null; tail = null; previousWorkspace = workspace }
-      next.chats = workspace ? await source.listChats(workspace) : []
+      const switched = workspace !== previousWorkspace
+      if (switched) { selected = null; tail = null; roster = null; previousWorkspace = workspace; metricsUntil = 0 }
+      if (workspace) {
+        if (!roster || roster.workspace !== workspace || pollMs === 0) {
+          roster = { workspace, chats: await source.listChats(workspace), until: clock() + 1500 }
+        } else if (clock() >= roster.until && !rosterRefresh) {
+          const current = roster
+          current.until = clock() + 1500
+          rosterRefresh = source.listChats(workspace).then(chats => {
+            if (!disposed && roster === current) current.chats = chats
+          }).catch(() => { if (roster === current) roster = null }).finally(() => { rosterRefresh = null })
+        }
+        next.chats = roster.chats
+      }
       if (selected && !next.chats.some((chat) => chat.id === selected)) selected = null
       const focus = workspace && next.chats.length > 1 ? await source.focusedChat?.(workspace, next.chats).catch(() => null) : null
       const following = !!focus && next.chats.some(chat => chat.id === focus)
@@ -39,7 +59,12 @@ export function start(orca: OrcaWorkerApi, source: Sources, pollMs = 2000): () =
         next.phase = next.chats.length ? 'choose' : 'empty'
         return next
       }
-      next.windowTokens = tokenCount(settings?.settings.contextWindowTokens) || null
+      next.windowTokens = preferences.windowTokens
+      // Focus is cheap and time-sensitive; expensive provider reads keep their own cadence.
+      if (!switched && pollMs > 0 && clock() < metricsUntil && snapshot.selected === next.selected && snapshot.phase !== 'unavailable') {
+        return { ...snapshot, chats: next.chats, following: next.following, locale: next.locale, windowTokens: next.windowTokens }
+      }
+      metricsUntil = clock() + 2000
       const chat = next.chats.find((row) => row.id === next.selected)
       next.context = await source.nativeContext(next.selected).catch(() => null)
       if (chat?.agent !== 'claude') {

@@ -60,3 +60,24 @@ test('requires a choice for multiple chats and clears stale numbers after /clear
     assert.deepEqual(worker.refusals, [])
   } finally { await worker.deactivate() }
 })
+
+test('focus changes bypass both the roster and metric refresh intervals', async () => {
+  let now = 0, focus = a.id, lists = 0, metricReads = 0
+  const source: Sources = {
+    listChats: async () => { lists++; return [a,b] }, focusedChat: async () => focus,
+    nativeContext: async () => { metricReads++; return null }, nativeTurn: async () => null,
+    geminiUsage: async () => null, providerRate: async () => null,
+    resolveChat: async () => ({id:'provider-a',config:null}), findTranscript: async () => 'example.jsonl',
+    makeTail: () => ({read:async () => sample})
+  }
+  const host = mockHost({results:{'workspace.readContext':{workspaceId:'folder:test',terminals:[],branch:'',displayName:'Test'}}})
+  let stop: (() => void) | undefined
+  const worker = await mountWorker({default: orca => {stop=start(orca,source,60_000,()=>now)},deactivate:()=>stop?.()},{host})
+  try {
+    assert.equal((await worker.request('gauge.get')).selected,a.id)
+    now=300; await worker.request('gauge.get'); assert.equal(metricReads,1)
+    now=600; focus=b.id; const changed=await worker.request('gauge.get')
+    assert.equal(changed.selected,b.id); assert.equal(changed.sample,null); assert.equal(metricReads,2); assert.equal(lists,1)
+    now=3000; await worker.request('gauge.get'); assert.equal(metricReads,3); assert.equal(lists,2)
+  } finally { await worker.deactivate() }
+})
