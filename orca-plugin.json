@@ -1,0 +1,21 @@
+{
+  "manifestVersion": 2,
+  "id": "chat-gauge",
+  "name": "Chat Gauge",
+  "version": "0.1.0",
+  "description": "Context usage and available request throughput for local agent chats in Orca.",
+  "engines": { "orca": ">=1.4.274" },
+  "execution": "trusted-worker",
+  "pluginApi": 1,
+  "main": "src/worker.ts",
+  "contributes": {
+    "panels": [{ "id": "chat-gauge", "title": "Chat Gauge", "icon": "gauge", "entry": "src/panel.tsx", "ui": "components" }],
+    "commands": [{ "id": "chat-gauge.sidebar", "title": "Chat Gauge: Toggle Right Sidebar", "action": "sidebar.right.toggle" }],
+    "statusBarItems": [{ "id": "gauge", "text": "Chat Gauge", "icon": "gauge", "command": "chat-gauge.sidebar" }],
+    "settings": [
+      { "key": "language", "title": "Language / 语言", "description": "Auto uses the Orca host's system locale. 自动使用 Orca 主机的系统区域语言。", "type": "string", "default": "auto", "enum": ["auto", "zh-CN", "zh-TW", "en"], "enumLabels": ["Auto / 自动", "简体中文", "繁體中文", "English"] },
+      { "key": "contextWindowTokens", "title": "Context Window (tokens)", "description": "Override the context window for the selected chat. Use 0 to follow Orca's reported window.", "type": "integer", "default": 0, "minimum": 0 }
+    ]
+  },
+  "capabilities": [{ "kind": "workspace:read" }, { "kind": "settings:own" }]
+}

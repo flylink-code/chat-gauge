@@ -1,0 +1,33 @@
+{
+  "kitVersion": "2.1.0",
+  "mode": "project",
+  "projectName": "Chat Gauge",
+  "createdAt": "2026-11-25",
+  "agentsMdMode": "created",
+  "files": {
+    "AGENTS.md": "13a5bcc6686997cc29884d2f754436a03a037721dd20004005c527d79230adaf",
+    "agent/index.md": "b465a1a63227c3df3df19e51bee9579b0ee7a6ac30bc49de8eab7d45b97affc1",
+    "agent/rules/00-global.md": "7aacd29b0b3fb1e2b5b71182d464e53dc8ca529044d1ad4ea34e16e824c84fc8",
+    "agent/rules/10-code.md": "78e3758db53b7bbb85dda0192d94881c131a51b62d2e6c43cabfc7074743207c",
+    "agent/rules/15-audience.md": "e54667ffcb6915a04d7b72949d74a4f2261c22c01e1ada66fe5d8ee87b704a01",
+    "agent/rules/20-git.md": "1303e5a81933c6df81a63728a1821dae555e66792accb12d78c16178119e0402",
+    "agent/rules/30-docs.md": "0d932c7a95c8059e558c054346c83245805378376913404b9be44141cf5a7edd",
+    "agent/rules/40-debug.md": "7e7ebcebcee5cd988573bb2dc1b0cacae22effb8a8d2e58faaea3380f9cc7de8",
+    "agent/rules/50-research.md": "f06459f1c29ad8b1d86722035d08ca5b1320476ff35372b33fd8d35aeb318d2b",
+    "agent/rules/60-archive.md": "fe292de376f1cc678e044eb492c0e657c7e14c04b530b69791cf3212cbf9b0f8",
+    "agent/rules/70-isolation.md": "0f61c119f5e93761488f85a443865ccd795a4225e98f5ff5005e35059781a34b",
+    "agent/playbooks/10-create.md": "ef25298e063668be4d88a55dbae47f9740b144ca85509f3dd1b5732f5359e442",
+    "agent/playbooks/20-implement.md": "705cfb4fc93de59f1b6943a0e8345684208170851269150f243accd1e365e2f0",
+    "agent/playbooks/30-debug.md": "23e7ff5d02e709e3891aa6d3573a536b1d579a57bf859652a9239c9bc611712c",
+    "agent/playbooks/40-optimize.md": "42c1e74dbf733f50347b0327638c284571e0e96095aa6ee2ee051bbcf5b1c9f2",
+    "agent/playbooks/50-archive.md": "3349816b44ca86fe999ba06567a1419b161412c07ffef24691e8b139d768f8b6",
+    "agent/context/requirements.md": "941e32adb9e6c4ffefa81350d21d929a23fa37b9729763670e0536eaf403f1dc",
+    "agent/context/hardware.md": "d6836e3eebfa156ee28c50aaefcec34c0b8c6cc6f20fc5b54a49845e5c42e175",
+    "agent/context/software.md": "d08cfd2d290c386d97ed0e2392eb17f541a37831362ddaaa5cc0bba7ad3989b2",
+    "agent/context/plan.md": "63976f33962ef7bc462e41ee7c22bda81c4ccb9a0bfeee2414d8f709bf975441",
+    "agent/context/decisions.md": "551f8d9f09204a6b0bd013a12c2cfea4ea082b7ac3ddf20ff2cfe52f6f516a65",
+    "agent/context/research/RESEARCH_INDEX.md": "17e2a48f33020e942280a097d32db2df4b20787e90931f87efc8c774b4155f57",
+    "agent/context/archive/ARCHIVE_INDEX.md": "e9c6c56fcd977f3af6960cb8e6bd73c9f6175c68d3b0061bb0402b5cac764e0f",
+    "agent/context/archive/_TEMPLATE.md": "0ddf4256945226b3d0bad5358fdc4ebd006fb4bee4806323ef0b1904e08aa966"
+  }
+}
