@@ -1,9 +1,13 @@
 import type { Snapshot } from './protocol'
 import { messages } from './i18n'
+import { rateCopy } from './rate-copy'
 
 const agents = new Map(Object.entries({
   claude: 'Claude Code', codex: 'Codex', antigravity: 'Antigravity', agy: 'Antigravity',
-  opencode: 'OpenCode', opencode2: 'OpenCode 2', pi: 'Pi'
+  opencode: 'OpenCode', opencode2: 'OpenCode 2', pi: 'Pi', omp: 'OMP', gemini: 'Gemini CLI',
+  copilot: 'GitHub Copilot', cursor: 'Cursor', grok: 'Grok', kimi: 'Kimi', hermes: 'Hermes', kiro: 'Kiro',
+  goose: 'Goose', aug: 'Auggie', kilo: 'Kilocode', 'mimo-code': 'MiMo Code', droid: 'Droid',
+  'qwen-code': 'Qwen Code', cline: 'Cline', devin: 'Devin', codebuddy: 'CodeBuddy'
 }))
 export const agentLabel = (agent: string) => agents.get(agent) ?? agent
 
@@ -26,12 +30,14 @@ export function metrics(snapshot: Snapshot) {
     ? { read: sample.cacheReadTokens, percent: sample.cacheReadTokens / sample.inputTokens * 100 }
     : null
   const tone = percent !== null && percent >= 90 ? 'danger' : percent !== null && percent >= 75 ? 'warning' : 'neutral'
-  const rate = sample?.durationMs ? `≈${(sample.outputTokens * 1000 / sample.durationMs).toFixed(1)} tok/s` : null
+  const timed = snapshot.providerRate ?? sample
+  const rate = timed?.durationMs ? `≈${(timed.outputTokens * 1000 / timed.durationMs).toFixed(1)} tok/s` : null
+  const rateNote = snapshot.providerRate ? rateCopy[snapshot.locale][snapshot.providerRate.scope] : messages(snapshot.locale).lastRequest
   const breakdown = native?.kind === 'report' && native.categories?.length && (useNative || (native.model && native.model === sample?.model))
     ? { at: native.capturedAt, categories: [...native.categories].sort((a, b) =>
       Number(!!a.deferred) - Number(!!b.deferred) || b.tokens - a.tokens) }
     : null
-  return { used, percent, rate, tone, window, free, cache, breakdown, contextEstimated: useNative ? native.kind === 'estimate' : used !== null,
+  return { used, percent, rate, rateNote, tone, window, free, cache, breakdown, contextEstimated: useNative ? native.kind === 'estimate' : used !== null,
     contextAt: useNative ? native.capturedAt : used !== null ? sample?.completedAt ?? null : null } as const
 }
 
@@ -44,6 +50,6 @@ export function status(snapshot: Snapshot) {
   if (!text) return { text: '—', tooltip: `Chat Gauge\n${t[snapshot.phase]}`, tone }
   const detail = [agent ? agentLabel(agent) : 'Chat Gauge']
   if (used !== null) detail.push(`${t.contextTokens}：${count(used)}${window ? ` / ${count(window)}` : ` · ${t.windowUnknown}`}${contextEstimated ? ` · ${t.estimated}` : ''}`)
-  if (rate) detail.push(`${t.throughput}：${rate}`, t.lastRequest)
+  if (rate) detail.push(`${t.throughput}：${rate}`, snapshot.providerRate ? rateCopy[snapshot.locale][snapshot.providerRate.scope] : t.lastRequest)
   return { text, tooltip: detail.join('\n'), tone }
 }

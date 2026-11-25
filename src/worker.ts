@@ -2,16 +2,18 @@ import type { OrcaWorkerApi } from 'orca/worker'
 import { status } from './format'
 import { resolveLocale } from './i18n'
 import { emptySnapshot, type Snapshot } from './protocol'
-import { findTranscript, listChats, nativeContext, resolveChat } from './source'
+import { findTranscript, focusedChat, listChats, nativeContext, nativeTurn, resolveChat } from './source'
+import { geminiUsage, providerRate } from './provider-sources'
 import { TranscriptTail } from './tail'
 import { tokenCount } from './transcript'
 
-const sources = { listChats, nativeContext, resolveChat, findTranscript, makeTail: (path: string, id: string) => new TranscriptTail(path, id) }
+const sources = { listChats, focusedChat, nativeContext, nativeTurn, providerRate, geminiUsage, resolveChat, findTranscript, makeTail: (path: string, id: string) => new TranscriptTail(path, id) }
 export type Sources = Omit<typeof sources, 'makeTail'> & { makeTail: (path: string, id: string) => Pick<TranscriptTail, 'read'> }
 
 export function start(orca: OrcaWorkerApi, source: Sources, pollMs = 2000): () => void {
   let disposed = false
   let selected: string | null = null
+  let previousWorkspace: string | null = null
   let snapshot = emptySnapshot
   let flight: Promise<Snapshot> | null = null
   let timer: ReturnType<typeof setInterval> | undefined
@@ -23,9 +25,15 @@ export function start(orca: OrcaWorkerApi, source: Sources, pollMs = 2000): () =
     const next: Snapshot = { ...emptySnapshot, phase: 'unavailable', locale: resolveLocale(settings?.settings.language) }
     try {
       const context = await orca.host.call('workspace.readContext')
-      next.chats = context?.workspaceId ? await source.listChats(context.workspaceId) : []
+      const workspace = context?.workspaceId ?? null
+      if (workspace !== previousWorkspace) { selected = null; tail = null; previousWorkspace = workspace }
+      next.chats = workspace ? await source.listChats(workspace) : []
       if (selected && !next.chats.some((chat) => chat.id === selected)) selected = null
-      next.selected = selected ?? (next.chats.length === 1 ? next.chats[0].id : null)
+      const focus = workspace && next.chats.length > 1 ? await source.focusedChat?.(workspace, next.chats).catch(() => null) : null
+      const following = !!focus && next.chats.some(chat => chat.id === focus)
+      if (following) selected = null // manual choice is a fallback, not a sticky pin
+      next.selected = following ? focus : selected ?? (next.chats.length === 1 ? next.chats[0].id : null)
+      if (following) next.following = true
       if (!next.selected) {
         tail = null
         next.phase = next.chats.length ? 'choose' : 'empty'
@@ -36,7 +44,18 @@ export function start(orca: OrcaWorkerApi, source: Sources, pollMs = 2000): () =
       next.context = await source.nativeContext(next.selected).catch(() => null)
       if (chat?.agent !== 'claude') {
         tail = null
-        next.phase = next.context && next.context.kind !== 'unknown' ? 'ready' : 'waiting'
+        const turn = await source.nativeTurn(next.selected).catch(() => null)
+        if (turn && !(next.context?.kind === 'unknown' && next.context.capturedAt >= turn.completedAt)) {
+          next.turn = turn
+          if (chat?.agent === 'gemini') {
+            const usage = await source.geminiUsage(next.selected,turn).catch(() => null)
+            if (usage) next.messageUsage = usage
+          } else if (chat) {
+            const rate = await source.providerRate(next.selected, chat.agent, turn).catch(() => null)
+            if (rate) next.providerRate = rate
+          }
+        }
+        next.phase = next.turn || (next.context && next.context.kind !== 'unknown') ? 'ready' : 'waiting'
         return next
       }
       const session = await source.resolveChat(next.selected)

@@ -51,7 +51,7 @@ test('shows cache and breakdown only when supplied for the selected chat', async
     })
     assert.ok(view.find({ text: '剩余 90,000 token' }))
     assert.ok(view.find({ text: 'Orca 记录了 Antigravity 的上下文总量，但没有分类或缓存明细。' }))
-    assert.ok(view.find({ text: 'Orca 未保存 Antigravity 每轮的输出 token 数。' }))
+    assert.ok(view.find({ text: '未能为已完成的轮次匹配完整的 Antigravity 输出 token 数。' }))
     assert.equal(view.find({ text: '1 · 73k' }), null)
     assert.equal(view.find({ text: '提示词缓存命中率' }), null)
     assert.equal(view.find({ text: '上下文构成' }), null)

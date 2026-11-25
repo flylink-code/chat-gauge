@@ -2,14 +2,14 @@
   "manifestVersion": 2,
   "id": "chat-gauge",
   "name": "Chat Gauge",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Context usage and available request throughput for local agent chats in Orca.",
   "engines": { "orca": ">=1.4.274" },
   "execution": "trusted-worker",
   "pluginApi": 1,
   "main": "src/worker.ts",
   "contributes": {
-    "panels": [{ "id": "chat-gauge", "title": "Chat Gauge", "icon": "gauge", "entry": "src/panel.tsx", "ui": "components" }],
+    "panels": [{ "id": "chat-gauge", "title": "Chat Gauge", "icon": "gauge", "entry": "src/panel.html", "ui": "html" }],
     "commands": [{ "id": "chat-gauge.sidebar", "title": "Chat Gauge: Toggle Right Sidebar", "action": "sidebar.right.toggle" }],
     "statusBarItems": [{ "id": "gauge", "text": "Chat Gauge", "icon": "gauge", "command": "chat-gauge.sidebar" }],
     "settings": [

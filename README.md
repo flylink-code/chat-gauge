@@ -11,7 +11,7 @@ See local agents’ **context usage** in Orca’s status bar and right sidebar, 
 ## Try the prototype
 
 1. On Windows, use Orca **1.4.274 or later** with Plugins enabled. From this repository, run `orca plugin dev load . --json` and review the access Orca asks you to approve. Approve only if you trust the local code.
-2. Open a local native chat in Orca. Chat Gauge auto-selects a lone chat. With several chats, select one in the panel; it does not guess which tab is focused.
+2. Open a local native chat in Orca. Chat Gauge auto-selects a lone chat. With several chats, it follows the active native Chat tab in the workspace on the next refresh. When Orca does not identify a focused Chat, the panel offers a manual fallback; it never guesses from agent activity.
 3. Select **Chat Gauge** in Orca’s right sidebar, or run `orca plugin open local.chat-gauge --panel chat-gauge`. The status item toggles the right sidebar. **Context Window (tokens)** defaults to `0` to use Orca’s reported limit, if available. A positive value overrides the window for whichever chat is selected.
 
 **Language:** Settings → Plugins → Chat Gauge → **Language / 语言**. Auto uses the Orca host’s system locale, not the chat content. The sidebar and status tooltip support English, Simplified Chinese, and Traditional Chinese; the status readout shows numbers and units only. Unsupported locales fall back to English.
@@ -25,11 +25,11 @@ See local agents’ **context usage** in Orca’s status bar and right sidebar, 
 | Context percentage | Relative to the reported window or a manual override. A custom endpoint’s window is never guessed from its model name. |
 | Claude context breakdown | Treemap areas follow reported occupied category counts; tile numbers match the detailed list. Free, reserved, and deferred categories are listed separately. |
 
-Claude Code context and throughput, and Antigravity context, are verified on local Windows. Codex, OpenCode, and Pi are discoverable; context reads use the same Orca facts when available and still need live validation. See the [support matrix](docs/multi-agent.md). Terminal panes, WSL, SSH, and paired remote hosts are not supported.
+Coverage follows Orca 1.4.274’s 23 native Chat agents. When available, the panel shows the window and successful root-turn time. Claude uses request timing; Antigravity and Codex can show a whole-turn average, and OpenCode 1/2, Copilot and Pi can show a timed message. Gemini can show output counts without inventing a rate. See the [support matrix](docs/multi-agent.md) for field requirements and live vs. fixture verification. Terminal panes, WSL, SSH, and paired remote hosts are not supported.
 
 ## Local access
 
-The trusted worker runs with your account’s access on the Orca host. It calls the local Orca CLI to list chats, queries only the selected chat’s context fields in Orca’s Windows database using a read-only connection, and reads the identified Claude JSONL for request metrics. It sends no data to external services, does not call model APIs, and forwards no transcript body to the UI. Orca’s database and the transcript formats may change. The only Orca capabilities requested are `workspace:read` and `settings:own`.
+The trusted worker runs with your account’s access on the Orca host. It calls the local Orca CLI to list chats, queries only the selected chat’s context fields in Orca’s Windows database using a read-only connection, and reads session-bound provider transcripts or SQLite usage metadata for optional message/turn metrics. It sends no data to external services, does not call model APIs, and forwards no transcript body to the UI. Orca’s database and the transcript formats may change. The only Orca capabilities requested are `workspace:read` and `settings:own`.
 
 ## Develop
 
@@ -44,12 +44,12 @@ npm run check
 orca plugin validate . --json
 ```
 
-`npm test` uses synthetic fixtures. `npm run check` renders no-chat, selected, multi-chat, and context-only states with Orca’s stand-in host. To exercise the real data path without loading the trusted worker, run `node scripts/smoke.mjs '<workspace selector>'` against a local workspace with a chat that has usage data. It prints only aggregate counts.
+`npm test` uses synthetic fixtures. `npm run check` checks the plugin with Orca; it does not exercise HTML frame interactions. On Windows, run `node scripts/check-panel.mjs` to exercise the real sidebar with synthetic snapshots in a local browser. For the worker data path, `node scripts/smoke.mjs '<workspace selector>'` reads a local workspace that has chat usage and prints aggregate counts only.
 
-If Orca is minimized, render a synthetic screenshot without installing the plugin:
+Capture the loaded HTML sidebar (desktop Orca, isolated plugin frames enabled):
 
 ```powershell
-orca plugin shot . --scenario 'high context' --theme dark --width 360 --json
+orca plugin shot local.chat-gauge --panel chat-gauge --width 320 --json
 ```
 
 Unload the development plugin with `orca plugin dev unload . --json`. See [MVP plan](docs/mvp.md) and [agent handoff](AGENTS.md) for scope and implementation notes.

@@ -4,7 +4,9 @@ import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
 import type { Chat } from './protocol'
+import { discoverFocusedChat } from './chat-focus'
 import { readNativeContext } from './context'
+import { readNativeTurn } from './native-turn'
 import { agentLabel } from './format'
 import { isRecord } from './transcript'
 
@@ -13,8 +15,9 @@ const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
 
 const roaming = () => process.env.APPDATA || join(homedir(), 'AppData', 'Roaming')
 export const nativeContext = (chatId: string) => readNativeContext(roaming(), chatId)
+export const nativeTurn = (chatId: string) => readNativeTurn(roaming(), chatId)
 
-export async function listChats(workspaceId: string): Promise<Chat[]> {
+async function runLocalCli(args: readonly string[]): Promise<string> {
   const env = { ...process.env }
   // Do not inherit a paired host, workspace selector, or Electron's worker launch mode.
   for (const key of Object.keys(env)) {
@@ -26,10 +29,24 @@ export async function listChats(workspaceId: string): Promise<Chat[]> {
   const cli = basename(process.execPath).toLowerCase() === 'orca.exe' &&
     (await lstat(bundled).catch(() => null))?.isFile() ? bundled : installed
   env.APPDATA = roaming()
-  const { stdout } = await run(cli, ['agent', 'list', '--environment', 'local', `--worktree=${workspaceId}`, '--json'], {
+  const { stdout } = await run(cli, [...args], {
     env, cwd: homedir(), windowsHide: true, timeout: 3500, maxBuffer: 2 * 1024 * 1024
   })
-  const data: unknown = JSON.parse(stdout)
+  return stdout
+}
+
+// Cache only the profile database locator, never the focused tab or its payload.
+let profile: { stdout: string; until: number } | undefined
+export const focusedChat = (workspace: string, chats: Chat[]) => discoverFocusedChat(workspace, {
+  listChats: async () => chats,
+  runCli: async args => {
+    if (!profile || Date.now() >= profile.until) profile = { stdout: await runLocalCli(args), until: Date.now()+60_000 }
+    return profile.stdout
+  }
+})
+
+export async function listChats(workspaceId: string): Promise<Chat[]> {
+  const data: unknown = JSON.parse(await runLocalCli(['agent','list','--environment','local',`--worktree=${workspaceId}`,'--json']))
   if (!isRecord(data) || data.ok !== true || !isRecord(data.result) || !Array.isArray(data.result.agents) || data.result.truncated === true) {
     throw new Error('Orca did not return a complete chat list')
   }
@@ -58,7 +75,7 @@ export function decodeSession(record: unknown): { id: string; config: string | n
   return { id: handle.sessionId, config }
 }
 
-export async function resolveChat(chatId: string) {
+export async function resolveRecord(chatId: string): Promise<unknown> {
   if (!uuid.test(chatId)) return null
   const { DatabaseSync } = await import('node:sqlite')
   // Orca's worker environment omits APPDATA; the default Windows install lives here.
@@ -66,9 +83,11 @@ export async function resolveChat(chatId: string) {
   const db = new DatabaseSync(join(appData, 'orca', 'agent-session-domain.db'), { readOnly: true })
   try {
     const row = db.prepare('SELECT record_json FROM agent_session_records WHERE session_id = ?').get(chatId)
-    return typeof row?.record_json === 'string' ? decodeSession(JSON.parse(row.record_json)) : null
+    return typeof row?.record_json === 'string' ? JSON.parse(row.record_json) : null
   } finally { db.close() }
 }
+
+export const resolveChat = async (chatId: string) => decodeSession(await resolveRecord(chatId))
 
 export async function findTranscript(session: { id: string; config: string | null }): Promise<string | null> {
   if (!uuid.test(session.id)) return null
