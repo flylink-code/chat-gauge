@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "chat-gauge",
   "name": "Chat Gauge",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Context usage and available request throughput for local agent chats in Orca.",
   "engines": { "orca": ">=1.4.274" },
   "execution": "trusted-worker",

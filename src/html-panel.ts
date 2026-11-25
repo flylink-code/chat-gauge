@@ -41,8 +41,9 @@ function paint() {
     const state = el('span','pill'); state.append(el('i', chat.state === 'working' ? 'dot working' : 'dot'),t[stateLabels.get(chat.state) ?? 'unknown'])
     meta.append(el('span','pill',agentLabel(chat.agent)), state)
   }
-  const showPicker = chats.length > 1 && (!chat || picking)
-  if (chat && chats.length > 1) {
+  const showPicker = !snapshot.following && chats.length > 1 && (!chat || picking)
+  if (snapshot.following) meta.append(el('span','pill', { en: 'Following active chat', 'zh-CN': '跟随当前对话', 'zh-TW': '跟隨目前對話' }[locale]))
+  if (chat && chats.length > 1 && !snapshot.following) {
     const toggle = el('button','switch',x.change); toggle.id = 'change-chat'; toggle.setAttribute('aria-controls','picker'); toggle.setAttribute('aria-expanded',String(showPicker))
     toggle.onclick = () => { picking = !picking; paint(); if (picking) select.focus(); else document.getElementById('change-chat')?.focus() }; meta.append(toggle)
   }

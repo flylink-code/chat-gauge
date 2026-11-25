@@ -8,9 +8,11 @@ const sample: Sample = { model: 'example/model', inputTokens: 900, outputTokens:
 
 test('requires a choice for multiple chats and clears stale numbers after /clear or a workspace switch', async () => {
   let chats = [a, b]
+  let focus: string | null = null
   let providerId = 'provider-a'
   const source: Sources = {
     listChats: async () => chats,
+    focusedChat: async () => focus,
     nativeContext: async (id) => id === b.id ? { kind: 'estimate', usedTokens: 12_345, windowTokens: 200_000, model: null, capturedAt: sample.completedAt } : null,
     geminiUsage: async () => null,
     nativeTurn: async () => ({ startedAt: 1000, completedAt: 4000, durationMs: 3000 }),
@@ -43,6 +45,16 @@ test('requires a choice for multiple chats and clears stale numbers after /clear
     assert.equal(other.providerRate?.outputTokens,90)
     assert.equal(other.turn?.durationMs,3000)
     assert.equal(other.context?.kind, 'estimate')
+    // Focus wins even though a is working and b was manually selected.
+    providerId = 'provider-a'; focus = a.id
+    const focusedA = await worker.request('gauge.get')
+    assert.equal(focusedA.following,true); assert.equal(focusedA.selected,a.id)
+    assert.deepEqual(focusedA.sample,sample); assert.equal(focusedA.providerRate,undefined)
+    focus = b.id
+    const focusedB = await worker.request('gauge.get')
+    assert.equal(focusedB.selected,b.id); assert.equal(focusedB.sample,null)
+    focus = 'other-workspace'
+    assert.equal((await worker.request('gauge.get')).phase,'choose')
     chats = []
     assert.equal((await worker.request('gauge.get')).phase, 'empty')
     assert.deepEqual(worker.refusals, [])

@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
 import type { Chat } from './protocol'
+import { discoverFocusedChat } from './chat-focus'
 import { readNativeContext } from './context'
 import { readNativeTurn } from './native-turn'
 import { agentLabel } from './format'
@@ -16,7 +17,7 @@ const roaming = () => process.env.APPDATA || join(homedir(), 'AppData', 'Roaming
 export const nativeContext = (chatId: string) => readNativeContext(roaming(), chatId)
 export const nativeTurn = (chatId: string) => readNativeTurn(roaming(), chatId)
 
-export async function listChats(workspaceId: string): Promise<Chat[]> {
+async function runLocalCli(args: readonly string[]): Promise<string> {
   const env = { ...process.env }
   // Do not inherit a paired host, workspace selector, or Electron's worker launch mode.
   for (const key of Object.keys(env)) {
@@ -28,10 +29,24 @@ export async function listChats(workspaceId: string): Promise<Chat[]> {
   const cli = basename(process.execPath).toLowerCase() === 'orca.exe' &&
     (await lstat(bundled).catch(() => null))?.isFile() ? bundled : installed
   env.APPDATA = roaming()
-  const { stdout } = await run(cli, ['agent', 'list', '--environment', 'local', `--worktree=${workspaceId}`, '--json'], {
+  const { stdout } = await run(cli, [...args], {
     env, cwd: homedir(), windowsHide: true, timeout: 3500, maxBuffer: 2 * 1024 * 1024
   })
-  const data: unknown = JSON.parse(stdout)
+  return stdout
+}
+
+// Cache only the profile database locator, never the focused tab or its payload.
+let profile: { stdout: string; until: number } | undefined
+export const focusedChat = (workspace: string, chats: Chat[]) => discoverFocusedChat(workspace, {
+  listChats: async () => chats,
+  runCli: async args => {
+    if (!profile || Date.now() >= profile.until) profile = { stdout: await runLocalCli(args), until: Date.now()+60_000 }
+    return profile.stdout
+  }
+})
+
+export async function listChats(workspaceId: string): Promise<Chat[]> {
+  const data: unknown = JSON.parse(await runLocalCli(['agent','list','--environment','local',`--worktree=${workspaceId}`,'--json']))
   if (!isRecord(data) || data.ok !== true || !isRecord(data.result) || !Array.isArray(data.result.agents) || data.result.truncated === true) {
     throw new Error('Orca did not return a complete chat list')
   }
