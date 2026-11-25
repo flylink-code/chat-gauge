@@ -22,6 +22,14 @@ Antigravity CLI 有输出 token 指标时，Orca 原生 Chat 插件为何仍无�
 | [Orca v1.4.274 ACP timeline](https://github.com/stablyai/orca/blob/v1.4.274/src/main/acp/timeline/acp-timeline-translator.ts)、[context projection](https://github.com/stablyai/orca/blob/v1.4.274/src/main/acp/timeline/acp-context-usage.ts) | `promptResult` 不传递响应 `usage`；窗口更新中的 `outputTokens: 0` 是占位，不是测量。 |
 | [Orca #18233](https://github.com/stablyai/orca/issues/18233) | 现有速度提案面向 terminal；不能作为已支持 Antigravity 原生 Chat 的依据。 |
 
+## 本机 agy 1.5.13 数据（2026-11-25，只看字段名与数值，未读对话内容）
+
+- 外部：官方 [`/context`](https://antigravity.google/docs/cli/commands/context/) 只在 TUI 里显示分类明细；官方 [status line 脚本接口](https://antigravity.google/docs/cli/statusline/) 的 `context_window` 只有输入/输出 token 总量、窗口大小和占比。ACP 的 `usage_update` 只有 `used` 与 `size`。三条路径都没有程序可读的分类明细，因此 Orca 里的 agy 没有构成图。
+- 实测：`~/.gemini/antigravity-cli/brain/<会话>/.system_generated/logs/chunks/transcript/*.jsonl` 中，每个模型调用（`PLANNER_RESPONSE`）记录 `input_tokens`、`output_tokens`、`cache_read_tokens`、`model` 和秒级 `created_at`；其他步骤没有 token 字段。会话库 `conversations/*.db` 是 protobuf，没有公开字段说明，未解码。
+- 推断：`created_at` 不是可用的耗时。一个样本里，输出 12,579 token 的步骤与前一步只隔 4 秒，对应约 3,100 tok/s，不合理，说明该时间既不是生成起点，也不是上一步的结束。用相邻步骤间隔计算速率会得出错误数值。
+- 未验证：Orca Chat 的会话 ID 与 agy 会话目录的对应关系；`created_at` 的确切含义。
+- 可行的验证：用一次极短的 `agy -p … --output-format stream-json` 调用（会产生一次模型请求），把 `step_update.duration_seconds` 与同一会话 transcript 的 `created_at` 逐步比对。只有证明时间可用、并能通过 Orca 的会话记录精确绑定到会话，才值得做 agy 速率适配。
+
 ## 结论与恢复条件
 
 - 本机 PATH 的 Windows `agy --version` 为 1.5.13；没有发起模型请求验证其 ACP 负载，也不假定 Orca 当前会话一定选用 PATH 二进制。

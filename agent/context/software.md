@@ -15,7 +15,7 @@ updated: 2026-11-25
 
 - `src/source.ts` 负责工作区 Chat 枚举、会话映射和精确查找 transcript。
 - `src/context.ts` 用只读 SQL 投影选中会话主线程的上下文事实；`src/transcript.ts` 和 `src/tail.ts` 追读 Claude JSONL，`src/format.ts` 统一计量口径。
-- 状态栏与面板读同一份快照；Claude 分类矩形树图只使用 Orca 原生组件，不改变宿主能力或快照协议。分类图不代表整窗占比，见 `docs/multi-agent.md`。
+- 状态栏与 HTML 侧栏读同一份快照。桌面侧栏从隔离框架的 `window.orca.plugin` 获取会话数据；矩形图默认按已占用分类展示，完整报告可切换整窗视图。见 `docs/ui-v2.md`。
 
 ## 未决项
 

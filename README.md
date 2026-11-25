@@ -44,12 +44,12 @@ npm run check
 orca plugin validate . --json
 ```
 
-`npm test` uses synthetic fixtures. `npm run check` renders no-chat, selected, multi-chat, and context-only states with Orca’s stand-in host. To exercise the real data path without loading the trusted worker, run `node scripts/smoke.mjs '<workspace selector>'` against a local workspace with a chat that has usage data. It prints only aggregate counts.
+`npm test` uses synthetic fixtures. `npm run check` checks the plugin with Orca; it does not exercise HTML frame interactions. On Windows, run `node scripts/check-panel.mjs` to exercise the real sidebar with synthetic snapshots in a local browser. For the worker data path, `node scripts/smoke.mjs '<workspace selector>'` reads a local workspace that has chat usage and prints aggregate counts only.
 
-If Orca is minimized, render a synthetic screenshot without installing the plugin:
+Capture the loaded HTML sidebar (desktop Orca, isolated plugin frames enabled):
 
 ```powershell
-orca plugin shot . --scenario 'high context' --theme dark --width 360 --json
+orca plugin shot local.chat-gauge --panel chat-gauge --width 320 --json
 ```
 
 Unload the development plugin with `orca plugin dev unload . --json`. See [MVP plan](docs/mvp.md) and [agent handoff](AGENTS.md) for scope and implementation notes.
