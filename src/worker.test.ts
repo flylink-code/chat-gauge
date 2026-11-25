@@ -12,6 +12,9 @@ test('requires a choice for multiple chats and clears stale numbers after /clear
   const source: Sources = {
     listChats: async () => chats,
     nativeContext: async (id) => id === b.id ? { kind: 'estimate', usedTokens: 12_345, windowTokens: 200_000, model: null, capturedAt: sample.completedAt } : null,
+    geminiUsage: async () => null,
+    nativeTurn: async () => ({ startedAt: 1000, completedAt: 4000, durationMs: 3000 }),
+    providerRate: async () => ({ scope: 'turn', completedAt: 4000, durationMs: 3000, outputTokens: 90 }),
     resolveChat: async () => ({ id: providerId, config: null }),
     findTranscript: async (session) => session.id === 'provider-a' ? 'a.jsonl' : null,
     makeTail: () => ({ read: async () => sample })
@@ -37,6 +40,8 @@ test('requires a choice for multiple chats and clears stale numbers after /clear
     const other = await worker.request('gauge.select', { id: b.id })
     assert.equal(other.phase, 'ready')
     assert.equal(other.sample, null)
+    assert.equal(other.providerRate?.outputTokens,90)
+    assert.equal(other.turn?.durationMs,3000)
     assert.equal(other.context?.kind, 'estimate')
     chats = []
     assert.equal((await worker.request('gauge.get')).phase, 'empty')

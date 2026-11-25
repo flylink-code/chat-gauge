@@ -60,19 +60,19 @@ export const contextCopy = {
   en: {
     free: 'Remaining', cache: 'Prompt cache hit rate', last: 'Last completed request', breakdown: 'Context breakdown',
     deferred: 'deferred', missing: 'This agent has not reported a breakdown.', agy: 'Orca records context totals for Antigravity, without a breakdown or cache usage.',
-    agyRate: 'Orca does not retain Antigravity’s output token count for the turn.',
+    agyRate: 'No completed turn could be matched to a complete Antigravity output count.',
     occupied: 'Reported occupied categories · Area by token count', outside: 'Free, reserved, or deferred', previous: 'Previous report'
   },
   'zh-CN': {
     free: '剩余', cache: '提示词缓存命中率', last: '最近一次已完成请求', breakdown: '上下文构成',
     deferred: '按需加载', missing: '此 Agent 未报告分类明细。', agy: 'Orca 记录了 Antigravity 的上下文总量，但没有分类或缓存明细。',
-    agyRate: 'Orca 未保存 Antigravity 每轮的输出 token 数。',
+    agyRate: '未能为已完成的轮次匹配完整的 Antigravity 输出 token 数。',
     occupied: '已占用分类 · 面积按 token 数分配', outside: '剩余、预留或按需加载', previous: '上次报告'
   },
   'zh-TW': {
     free: '剩餘', cache: '提示詞快取命中率', last: '最近一次已完成請求', breakdown: '上下文構成',
     deferred: '按需載入', missing: '此 Agent 未回報分類明細。', agy: 'Orca 記錄了 Antigravity 的上下文總量，但沒有分類或快取明細。',
-    agyRate: 'Orca 未保存 Antigravity 每輪的輸出 token 數。',
+    agyRate: '未能為已完成的輪次配對完整的 Antigravity 輸出 token 數。',
     occupied: '已占用分類 · 面積按 token 數分配', outside: '剩餘、預留或按需載入', previous: '上次報告'
   }
 }

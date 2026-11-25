@@ -23,8 +23,8 @@
 | 占比 | 以实际读到或手动覆盖的窗口为分母，不按模型名称猜。 |
 | Claude 上下文构成 | 默认按已占用分类绘制彩色矩形；悬停或用 Tab 聚焦可查看数值，小块合并但明细保留。报告总量能与窗口核对时，可切换「整个窗口」查看剩余和压缩预留；按需加载项不计入面积。 |
 
-Windows 本机：Claude Code 支持上下文和近似吞吐；Antigravity（agy）已验证上下文。Codex、OpenCode、Pi 等可在选择器中出现，能否读到上下文取决于 Orca 是否为该会话保存了数据；未验证或无数据时不显示数字。详见[支持矩阵](docs/multi-agent.md)。Terminal、WSL、SSH、远程 Orca 暂不支持。
+按 Orca 1.4.274 的 23 个原生 Chat 标识接入。上下文与成功轮次耗时依赖宿主记录；Claude 使用请求平均，Antigravity 和 Codex 可显示整轮平均，OpenCode 1/2、Copilot 和 Pi 在消息计时可用时显示消息平均。Gemini 可显示消息输出 token 而不推测速率。各项所需字段和实测范围见[支持矩阵](docs/multi-agent.md)。Terminal、WSL、SSH、远程 Orca 暂不支持。
 
-Worker 调用本机 Orca CLI，用只读 SQL 取选中会话的用量字段，并读取对应 Claude Code JSONL，不联网、不调用模型 API、不把对话正文传到面板。Worker 仍以用户账户权限运行。Orca 会话数据库与 JSONL 格式可能随版本变化。
+Worker 调用本机 Orca CLI，用只读 SQL 取选中会话的用量字段，并只读对应 Provider 的本机会话日志或 SQLite 指标，不联网、不调用模型 API、不把对话正文传到面板。Worker 仍以用户账户权限运行。Orca 会话数据库与 JSONL 格式可能随版本变化。
 
 开发、验证及卸载命令见 [英文开发说明](README.md#develop)，工程规划见 [MVP 计划](docs/mvp.md)。

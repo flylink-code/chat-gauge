@@ -25,11 +25,11 @@ See local agents’ **context usage** in Orca’s status bar and right sidebar, 
 | Context percentage | Relative to the reported window or a manual override. A custom endpoint’s window is never guessed from its model name. |
 | Claude context breakdown | Treemap areas follow reported occupied category counts; tile numbers match the detailed list. Free, reserved, and deferred categories are listed separately. |
 
-Claude Code context and throughput, and Antigravity context, are verified on local Windows. Codex, OpenCode, and Pi are discoverable; context reads use the same Orca facts when available and still need live validation. See the [support matrix](docs/multi-agent.md). Terminal panes, WSL, SSH, and paired remote hosts are not supported.
+Coverage follows Orca 1.4.274’s 23 native Chat agents. When available, the panel shows the window and successful root-turn time. Claude uses request timing; Antigravity and Codex can show a whole-turn average, and OpenCode 1/2, Copilot and Pi can show a timed message. Gemini can show output counts without inventing a rate. See the [support matrix](docs/multi-agent.md) for field requirements and live vs. fixture verification. Terminal panes, WSL, SSH, and paired remote hosts are not supported.
 
 ## Local access
 
-The trusted worker runs with your account’s access on the Orca host. It calls the local Orca CLI to list chats, queries only the selected chat’s context fields in Orca’s Windows database using a read-only connection, and reads the identified Claude JSONL for request metrics. It sends no data to external services, does not call model APIs, and forwards no transcript body to the UI. Orca’s database and the transcript formats may change. The only Orca capabilities requested are `workspace:read` and `settings:own`.
+The trusted worker runs with your account’s access on the Orca host. It calls the local Orca CLI to list chats, queries only the selected chat’s context fields in Orca’s Windows database using a read-only connection, and reads session-bound provider transcripts or SQLite usage metadata for optional message/turn metrics. It sends no data to external services, does not call model APIs, and forwards no transcript body to the UI. Orca’s database and the transcript formats may change. The only Orca capabilities requested are `workspace:read` and `settings:own`.
 
 ## Develop
 

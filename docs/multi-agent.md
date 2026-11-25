@@ -1,45 +1,22 @@
-# 多 Agent 指标接入
+# Windows 本机原生 Chat 指标
 
-## 当前实现（Windows 本机 Chat）
+范围按 Orca v1.4.274 的 [ACP 启动表](https://github.com/stablyai/orca/blob/v1.4.274/src/main/acp/launch/acp-launch-registry.ts) 加 Claude Code、Codex、Pi 三个原生适配器，共 23 个标识。不是终端 Agent 菜单。仅显示本机工作区会话；不启动 Agent、不向模型发送请求。
 
-- Orca 会列出当前工作区的本机原生 Chat，不再限制为 Claude Code。只有一个时自动选中；多个时手动选择。以 Orca Chat ID 绑定，不按日志修改时间猜会话。
-- 上下文走一条通用路径：只读 Orca 会话数据库，从当前 epoch、最近一次 clear 之后的可见 turn 投影上下文事实。SQL 仅返回用量字段，不返回 turn 正文。`report` 显示为 Reported，`estimate` 显示为 Estimated，`unknown` 不回填旧读数。
-- Claude Code 另有 JSONL 请求采样：给出含首 token 等待的估算平均吞吐。Orca 较新的上下文优先；如果 Claude JSONL 比缓存的 Orca 报告新，则以最新请求估算上下文。同一模型可以沿用上次已知的窗口上限。手动配置会覆盖自动上限。
-
-## 上下文面板的数据口径
-
-- 窗口已知时显示剩余 token。来源与时间独立于最新请求；不根据历史增长速度猜剩余请求数。
-- Claude Code 分类以矩形树图显示。面积按 Orca 报告的已占用分类 token 数分配，编号与精确明细对应；剩余、压缩预留和按需加载项另列。分类和不作为已用总量，也不替代上方窗口占用条。最新请求比报告更新时，同模型的旧分类标注「上次报告」及时间。
-- 提示词缓存命中率只对有明确 cache-read 字段的完成请求显示：缓存读取 token ÷ 全部输入 token（含缓存读取和写入）。不把缺失字段当 0%，也不把缓存拆分当上下文分类。
-- Antigravity 经 ACP `usage_update` 提供 `used` / `size`，当前可展示窗口占用与剩余；该通知不含分类、缓存明细或生成时间。新会话在首次更新落盘前会显示暂无用量。
-
-## 支持矩阵
-
-| Agent | 上下文 | 请求吞吐 |
+| Agent | 已接入的吞吐或用量 | 验证范围 |
 | --- | --- | --- |
-| Claude Code | 本机验证；Orca 上下文或 JSONL 回退 | 本机验证；JSONL 请求耗时估算 |
-| Antigravity（agy） | 本机验证；Orca 记录已用 token 和窗口 | 不显示；已验证的记录是窗口快照，不是输出 token 与请求时钟 |
-| Codex | Orca 如果写出上下文事实即可读，待本机有样本验证 | 待专用适配与验证 |
-| OpenCode / OpenCode 2 | 同上 | 待专用适配与验证，两版本分别验收 |
-| Pi | 同上 | 待专用适配与验证 |
-| 其他原生 Chat | 同上；无事实则显示无数据 | 暂不支持 |
+| Claude Code | 已完成请求的输出 / 请求耗时（含首 token 等待）；缓存与上下文构成 | 合成测试、本机 Chat |
+| Antigravity（agy） | 可唯一匹配的根轮次：主模型各步输出之和 / Orca 整轮耗时；不含子 Agent，不是解码速度 | 合成测试、本机历史，见 [证据和限制](../agent/context/research/agy-throughput.md) |
+| Codex | 已完成 rollout 轮次的输出 / 轮次耗时 | 合成测试 |
+| OpenCode、OpenCode 2 | 选中账号和会话 SQLite 的已完成 assistant 消息：输出 / 消息耗时 | 两版及迁移、托管账号均有合成测试 |
+| GitHub Copilot | 根会话完成调用的输出与耗时，排除子 Agent；状态提示按消息平均标注 | 合成测试；本机 CLI 记录字段已核对，未验证 Orca 端到端 |
+| Pi | 当前分支已完成 assistant 消息**显式提供时长**才出速率；只有时间戳不推算 | 合成测试；不保证标准 Pi 日志含时长 |
+| Gemini CLI | 最近完成消息的输出 token；没有匹配的调用时长，不出速率 | 合成测试 |
+| Grok、OMP、Kimi、Cursor、Hermes、Kiro、Goose、Auggie、Kilocode、MiMo Code、Droid、Qwen Code、Cline、Devin、CodeBuddy | 共用下述上下文和整轮计时；没有专用 token 速率适配 | 上游注册表、合成公共链路；不是逐个真机验证 |
 
-## 下一批适配顺序
+**通用读数**：`report` 用 provider 上报的窗口，`estimate` 用输入及缓存计数；`unknown` 不沿用旧读数。无事实不显示数字。非 Claude 会话可单独显示 Orca 最近成功根轮次的耗时，条件是当前 epoch、最近一次 clear 之后，且最新一轮已完成并明确成功；含工具/等待，不是生成耗时。不拿窗口增量计算 tok/s，也不把 ACP 快照的占位零当输出计数。
 
-| 优先级 | Agent | 实现入口与 UI 口径 |
-| --- | --- | --- |
-| 1 | OpenCode / OpenCode 2 | 用 ACP handle 的 `nativeId` 绑定 session。只读对应账号的 SQLite：1.x `message`、2.x `session_message`；只用已完成 assistant 记录的 `tokens.output` 与 `time.created` / `time.completed`，标明「消息平均吞吐」，不称为解码速度。需要独立验证两版和托管账号目录。 |
-| 2 | Codex | Orca 已把上下文窗口保存在报告中。未来按 thread ID 匹配 rollout，按 `turn_id` 把去重后的 `last_token_usage.output_tokens` 与 Orca 同一已完成 turn 的耗时配对；只能标「整轮平均」，包含工具时间。 |
-| 3 | Pi | 按当前 handle 指定的 JSONL 路径读取当前分支，不把其他分支、失败响应或压缩前的记录混入；输出 token 可取自 `message.usage.output`，无单次请求起点；如做整轮平均，必须有可靠的 Orca turn 边界。 |
-| 上游 | Antigravity | 较新 `agy acp` 可在 `session/prompt` 完成时报告整轮 `usage.outputTokens`，但 Orca v1.4.274 的时间线未保留该字段。须有同一轮的输出数和耗时才能显示「整轮平均」，仍非实时解码速率。见 [agy 吞吐调查](../agent/context/research/agy-throughput.md)。 |
+**会话绑定**：同一工作区多会话要明确选择。专用适配器读取所选会话的 provider handle 与账号限定的本机记录；输出和时间不能对应、超出读取上限、存储缺失或格式变化时，该指标留空。模型调用、消息、整轮是不同分母，侧栏和状态栏悬停提示注明口径。消息/整轮速率不参与上下文或缓存命中率计算。
 
-可核对的 Orca v1.4.274 实现入口：[Codex context](https://github.com/stablyai/orca/blob/v1.4.274/src/main/codex/structured/journal/codex-context-usage.ts)、[OpenCode SQLite 字段](https://github.com/stablyai/orca/blob/v1.4.274/src/main/opencode-usage/opencode-usage-row-parsing.ts)、[Pi RPC context](https://github.com/stablyai/orca/blob/v1.4.274/src/main/pi/rpc/rpc-context-usage.ts)、[ACP timeline](https://github.com/stablyai/orca/blob/v1.4.274/src/main/acp/timeline/acp-timeline-translator.ts)。
+**展示**：Claude 构成图默认仅画已占用分类，报告一致时可切换整个窗口。预留、剩余与按需加载分别列出；旧报告注明时间。缓存命中率只用明确报告的缓存读取数 / 全部输入。Antigravity 的窗口更新不含分类。
 
-## 新增吞吐适配的验收条件
-
-1. 能通过 Orca 的当前 provider handle 精确定位该会话。不同机器、账号、工作区和子 agent 的记录不能串用。
-2. 同一条已完成模型请求有输出 token 数与耗时，或者可从明确的起止事件计算耗时。不要把一整轮（含工具、审批和多个请求）当作一次生成，不把全会话累计 token 当作单次输出。
-3. 无时间戳、仅有用量或断点不可靠时，独立降级为只显示上下文。没有逐 token 事件时，不显示实时解码速率。
-4. 先用合成样本测试缺字段、重复记录、清理或压缩，再用真实本机 Chat 校验。不得启动模型调用作为默认测试；测试不输出对话、凭据、会话 ID 或工作区路径。
-
-Orca 的 Chat 事实结构来自其 [v1.4.274 类型](https://github.com/stablyai/orca/blob/v1.4.274/src/shared/agent-session/conversation-context/agent-session-context-usage.ts)，数据库不是公开 API。如果 Orca 提供正式的 Chat metrics API，优先迁移。
+来源：[Orca 上下文类型](https://github.com/stablyai/orca/blob/v1.4.274/src/shared/agent-session/conversation-context/agent-session-context-usage.ts)、[ACP 窗口快照](https://github.com/stablyai/orca/blob/v1.4.274/src/main/acp/timeline/acp-context-usage.ts)、[整轮计时](https://github.com/stablyai/orca/blob/v1.4.274/src/shared/agent-session/view/structured-agent-session-turn-timing.ts)。这些本机存储不是稳定的公开 API，更新 Orca 或 Agent 后需复测。

@@ -6,7 +6,7 @@
 | 主题 | 结论一句话 | 状态 | 日期 | 详情 |
 | --- | --- | --- | --- | --- |
 | Orca Chat 指标来源 | 宿主支持状态栏与面板；首版用精确匹配的本地 transcript | active | 2026-11-25 | `orca-metrics.md` |
-| Antigravity 原生 Chat 吞吐 | 较新 agy ACP 提供轮次输出数，但 Orca 1.4.274 未保留该字段 | active | 2026-11-25 | `agy-throughput.md` |
+| Antigravity 原生 Chat 吞吐 | Orca turn 边界 + agy 逐调用 output_tokens 可在精确绑定后给整轮平均；绑定不唯一则 null | active | 2026-11-25 | `agy-throughput.md` |
 
 ## 状态说明
 

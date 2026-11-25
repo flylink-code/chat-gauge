@@ -2,11 +2,12 @@ import type { OrcaWorkerApi } from 'orca/worker'
 import { status } from './format'
 import { resolveLocale } from './i18n'
 import { emptySnapshot, type Snapshot } from './protocol'
-import { findTranscript, listChats, nativeContext, resolveChat } from './source'
+import { findTranscript, listChats, nativeContext, nativeTurn, resolveChat } from './source'
+import { geminiUsage, providerRate } from './provider-sources'
 import { TranscriptTail } from './tail'
 import { tokenCount } from './transcript'
 
-const sources = { listChats, nativeContext, resolveChat, findTranscript, makeTail: (path: string, id: string) => new TranscriptTail(path, id) }
+const sources = { listChats, nativeContext, nativeTurn, providerRate, geminiUsage, resolveChat, findTranscript, makeTail: (path: string, id: string) => new TranscriptTail(path, id) }
 export type Sources = Omit<typeof sources, 'makeTail'> & { makeTail: (path: string, id: string) => Pick<TranscriptTail, 'read'> }
 
 export function start(orca: OrcaWorkerApi, source: Sources, pollMs = 2000): () => void {
@@ -36,7 +37,18 @@ export function start(orca: OrcaWorkerApi, source: Sources, pollMs = 2000): () =
       next.context = await source.nativeContext(next.selected).catch(() => null)
       if (chat?.agent !== 'claude') {
         tail = null
-        next.phase = next.context && next.context.kind !== 'unknown' ? 'ready' : 'waiting'
+        const turn = await source.nativeTurn(next.selected).catch(() => null)
+        if (turn && !(next.context?.kind === 'unknown' && next.context.capturedAt >= turn.completedAt)) {
+          next.turn = turn
+          if (chat?.agent === 'gemini') {
+            const usage = await source.geminiUsage(next.selected,turn).catch(() => null)
+            if (usage) next.messageUsage = usage
+          } else if (chat) {
+            const rate = await source.providerRate(next.selected, chat.agent, turn).catch(() => null)
+            if (rate) next.providerRate = rate
+          }
+        }
+        next.phase = next.turn || (next.context && next.context.kind !== 'unknown') ? 'ready' : 'waiting'
         return next
       }
       const session = await source.resolveChat(next.selected)

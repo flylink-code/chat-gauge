@@ -2,6 +2,7 @@ import { agentLabel, compact, count, metrics } from './format'
 import { contextCopy, localTimestamp, messages, resolveLocale } from './i18n'
 import { emptySnapshot, type Snapshot } from './protocol'
 import { disposeMap, renderMap } from './html-map'
+import { rateCopy } from './rate-copy'
 
 const extra = {
   en: { change: 'Switch chat', why: 'Why is this unavailable?', na: 'Unavailable', noMap: 'No category breakdown', buffer: 'Reserved for compaction', manual: 'Custom limit', failed: 'Could not switch chats.' },
@@ -53,7 +54,7 @@ function paint() {
   }
   select.value = selected ?? ''; select.disabled = pending
   const frag = document.createDocumentFragment()
-  if (!chat || (m.used === null && !sample)) {
+  if (!chat || (m.used === null && !sample && !snapshot.turn && !m.rate)) {
     const p = el('p','notice',t[phase]); p.setAttribute('role','status'); frag.append(p)
   } else {
     const overview = el('section'); overview.id = 'overview'
@@ -78,8 +79,12 @@ function paint() {
     const cards = el('div'); cards.id = 'metrics'
     if (m.cache && sample) { const card = el('section','metric'); card.append(el('h2','',c.cache),el('b','reading',`${m.cache.percent.toFixed(1)}%`),el('p','note',`${compact(m.cache.read)} / ${compact(sample.inputTokens)} · ${c.last}`)); cards.append(card) }
     const rate = el('section',`metric${m.rate ? '' : ' unavailable'}`); rate.append(el('h2','',t.throughput),el('b','reading',m.rate ?? x.na))
-    if (m.rate) rate.append(el('p','note',t.lastRequest)); else { const why = el('details'); why.dataset.state = 'rate'; why.append(el('summary','',x.why),el('p','note',agy ? c.agyRate : t.timingUnavailable)); rate.append(why) }
-    cards.append(rate); frag.append(cards)
+    if (m.rate) rate.append(el('p','note',m.rateNote)); else { const why = el('details'); why.dataset.state = 'rate'; why.append(el('summary','',x.why),el('p','note',agy ? c.agyRate : t.timingUnavailable)); rate.append(why) }
+    cards.append(rate)
+    if (snapshot.turn) {
+      const clock = el('section','metric'); clock.append(el('h2','',rateCopy[locale].elapsed),el('b','reading',`${(snapshot.turn.durationMs/1000).toFixed(2)} s`),el('p','note',`${rateCopy[locale].finished} · ${localTimestamp(snapshot.turn.completedAt,locale)}`)); cards.append(clock)
+    }
+    frag.append(cards)
     if (m.breakdown && context?.kind === 'report') {
       const section = el('section'); section.id = 'map-view'; frag.append(section)
       if (chat.agent === 'claude') {
@@ -89,10 +94,12 @@ function paint() {
       else { section.append(el('h2','',c.breakdown)); for (const row of m.breakdown.categories) section.append(el('p','note',`${row.name}${row.deferred ? ` · ${c.deferred}` : ''}: ${count(row.tokens)}`)) }
       section.append(el('p','note report-at',`${m.breakdown.at === m.contextAt ? t.reported : c.previous} · ${localTimestamp(m.breakdown.at,locale)}`))
     } else if (m.used !== null) {const note = el('aside','notice'); note.append(el('strong','',x.noMap),el('p','note',agy ? c.agy : c.missing)); frag.append(note)}
-    const model = sample?.model ?? (context?.kind === 'report' ? context.model : null)
-    if (sample || model) {
+    const model = sample?.model ?? snapshot.messageUsage?.model ?? (context?.kind === 'report' ? context.model : null)
+    if (sample || model || snapshot.messageUsage || snapshot.providerRate) {
       const d = el('details','details'); d.dataset.state = 'request'; const list = el('dl'); d.append(el('summary','',t.details),list)
       const pair = (label:string,value:string) => { const row = el('div','pair'); row.append(el('dt','',label),el('dd','',value)); list.append(row) }
+      if (snapshot.messageUsage) { pair(t.output,count(snapshot.messageUsage.outputTokens)); pair(t.requestRecorded,localTimestamp(snapshot.messageUsage.completedAt,locale)) }
+      if (snapshot.providerRate) { pair(t.output,count(snapshot.providerRate.outputTokens)); pair(rateCopy[locale][snapshot.providerRate.scope],`${(snapshot.providerRate.durationMs/1000).toFixed(2)} s`); pair(rateCopy[locale].finished,localTimestamp(snapshot.providerRate.completedAt,locale)) }
       if (model) pair(t.model,model); if (sample) { pair(t.input,count(sample.inputTokens)); pair(t.output,count(sample.outputTokens)); pair(t.duration,sample.durationMs === null ? '—' : `≈${(sample.durationMs/1000).toFixed(2)} s`); pair(t.requestRecorded,localTimestamp(sample.completedAt,locale)) }; frag.append(d)
     }
   }

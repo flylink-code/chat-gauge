@@ -5,6 +5,7 @@ import { basename, dirname, isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
 import type { Chat } from './protocol'
 import { readNativeContext } from './context'
+import { readNativeTurn } from './native-turn'
 import { agentLabel } from './format'
 import { isRecord } from './transcript'
 
@@ -13,6 +14,7 @@ const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
 
 const roaming = () => process.env.APPDATA || join(homedir(), 'AppData', 'Roaming')
 export const nativeContext = (chatId: string) => readNativeContext(roaming(), chatId)
+export const nativeTurn = (chatId: string) => readNativeTurn(roaming(), chatId)
 
 export async function listChats(workspaceId: string): Promise<Chat[]> {
   const env = { ...process.env }
@@ -58,7 +60,7 @@ export function decodeSession(record: unknown): { id: string; config: string | n
   return { id: handle.sessionId, config }
 }
 
-export async function resolveChat(chatId: string) {
+export async function resolveRecord(chatId: string): Promise<unknown> {
   if (!uuid.test(chatId)) return null
   const { DatabaseSync } = await import('node:sqlite')
   // Orca's worker environment omits APPDATA; the default Windows install lives here.
@@ -66,9 +68,11 @@ export async function resolveChat(chatId: string) {
   const db = new DatabaseSync(join(appData, 'orca', 'agent-session-domain.db'), { readOnly: true })
   try {
     const row = db.prepare('SELECT record_json FROM agent_session_records WHERE session_id = ?').get(chatId)
-    return typeof row?.record_json === 'string' ? decodeSession(JSON.parse(row.record_json)) : null
+    return typeof row?.record_json === 'string' ? JSON.parse(row.record_json) : null
   } finally { db.close() }
 }
+
+export const resolveChat = async (chatId: string) => decodeSession(await resolveRecord(chatId))
 
 export async function findTranscript(session: { id: string; config: string | null }): Promise<string | null> {
   if (!uuid.test(session.id)) return null

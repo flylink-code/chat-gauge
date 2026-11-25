@@ -18,6 +18,9 @@ export type Snapshot = {
   locale: Locale
   chats: Chat[]
   selected: string | null
+  providerRate?: import('./provider-rate').ProviderRate
+  turn?: import('./native-turn').NativeTurn
+  messageUsage?: { model: string | null; inputTokens: number; outputTokens: number; completedAt: number }
   sample: Sample | null
   context: ContextSample | null
   windowTokens: number | null
