@@ -840,6 +840,8 @@ function parseArgs(argv) {
     json: false,
     wait: 0,
     height: 900,
+    scale: 1,
+    locale: null,
     screenshots: true
   }
   for (let i = 0; i < argv.length; i++) {
@@ -852,6 +854,8 @@ function parseArgs(argv) {
     else if (arg === '--json') opts.json = true
     else if (arg === '--wait') opts.wait = Number(next()) || 0
     else if (arg === '--height') opts.height = Number(next()) || 900
+    else if (arg === '--scale') opts.scale = Number(next()) || 1
+    else if (arg === '--locale') opts.locale = next()
     else if (arg === '--no-screenshots') opts.screenshots = false
     else if (arg === '--no-auto') opts.auto = false
     else if (arg === '--help' || arg === '-h') opts.help = true
@@ -869,6 +873,8 @@ function usage() {
     '  --scenario detailed,missing  scenarios (default: detailed,missing)',
     '  --panel <path>         panel HTML (default: src/panel.html)',
     '  --height <px>          viewport height (default: 900)',
+    '  --scale <n>            device pixel ratio for screenshots (default: 1)',
+    '  --locale <tag>         force the panel language (en, zh-CN, zh-TW) in every snapshot; for store screenshots, not for checks',
     '  --wait <seconds>       wait for the panel implementation before starting',
     '  --no-auto              skip the OS prefers-color-scheme fallback cases',
     '  --no-screenshots       skip PNG output',
@@ -932,6 +938,7 @@ async function main() {
   const { server, port: httpPort, address } = await startServer(panelPath)
   if (address !== '127.0.0.1') throw new Error(`static server must bind loopback, got ${address}`)
   await verifyServerLockdown(httpPort, panelUrlPath)
+  if (opts.locale) for (const def of Object.values(SCENARIOS)) { def.snapshot.locale = opts.locale; for (const s of Object.values(def.byChat)) s.locale = opts.locale }
   let browser
   let cdp
   const results = []
@@ -968,7 +975,7 @@ async function main() {
         })
       } catch { /* older builds: JS matchMedia override still covers script checks */ }
       await cdp.send('Emulation.setDeviceMetricsOverride', {
-        width, height: opts.height, deviceScaleFactor: 1, mobile: false, screenWidth: width, screenHeight: opts.height
+        width, height: opts.height, deviceScaleFactor: opts.scale, mobile: false, screenWidth: width, screenHeight: opts.height
       })
       await navigate(cdp, url)
       await waitPanelReady(cdp)
