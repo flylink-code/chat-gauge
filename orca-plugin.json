@@ -2,19 +2,25 @@
   "manifestVersion": 2,
   "id": "chat-gauge",
   "name": "Chat Gauge",
-  "version": "0.3.1",
-  "description": "Context usage and available request throughput for local agent chats in Orca.",
+  "version": "0.3.2",
+  "description": "Context usage and token throughput for local agent chats in Orca. 本机 Agent 对话的上下文用量与 token 吞吐。",
+  "homepage": "https://github.com/flylink-code/chat-gauge",
+  "icon": "assets/icon.png",
+  "screenshots": [
+    { "path": "assets/screenshots/light.png", "alt": "Chat Gauge sidebar in English and Chinese: chat tabs, context window, cache hit rate, throughput and a context treemap", "caption": "English and 简体中文 / 浅色", "theme": "light" },
+    { "path": "assets/screenshots/dark.png", "alt": "Chat Gauge sidebar in English and Chinese in the dark theme", "caption": "English and 简体中文 / 深色", "theme": "dark" }
+  ],
   "engines": { "orca": ">=1.4.274" },
   "execution": "trusted-worker",
   "pluginApi": 1,
   "main": "src/worker.ts",
   "contributes": {
     "panels": [{ "id": "chat-gauge", "title": "Chat Gauge", "icon": "gauge", "entry": "src/panel.html", "ui": "html" }],
-    "commands": [{ "id": "chat-gauge.sidebar", "title": "Chat Gauge: Toggle Right Sidebar", "action": "sidebar.right.toggle" }],
+    "commands": [{ "id": "chat-gauge.sidebar", "title": "Chat Gauge: Toggle Right Sidebar · 切换右侧栏", "action": "sidebar.right.toggle" }],
     "statusBarItems": [{ "id": "gauge", "text": "Chat Gauge", "icon": "gauge", "command": "chat-gauge.sidebar" }],
     "settings": [
       { "key": "language", "title": "Language / 语言", "description": "Auto uses the Orca host's system locale. 自动使用 Orca 主机的系统区域语言。", "type": "string", "default": "auto", "enum": ["auto", "zh-CN", "zh-TW", "en"], "enumLabels": ["Auto / 自动", "简体中文", "繁體中文", "English"] },
-      { "key": "contextWindowTokens", "title": "Context Window (tokens)", "description": "Override the context window for the selected chat. Use 0 to follow Orca's reported window.", "type": "integer", "default": 0, "minimum": 0 }
+      { "key": "contextWindowTokens", "title": "Context Window (tokens)", "description": "Override the context window for the selected chat. Use 0 to follow Orca's reported window. 覆盖所选对话的上下文窗口；0 表示沿用 Orca 报告的窗口。", "type": "integer", "default": 0, "minimum": 0 }
     ]
   },
   "capabilities": [{ "kind": "workspace:read" }, { "kind": "settings:own" }]
