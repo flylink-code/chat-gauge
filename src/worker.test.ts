@@ -6,13 +6,11 @@ const a: Chat = { id: 'a', title: 'Chat A', state: 'working', agent: 'claude' }
 const b: Chat = { id: 'b', title: 'Chat B', state: 'done', agent: 'antigravity' }
 const sample: Sample = { model: 'example/model', inputTokens: 900, outputTokens: 100, durationMs: 2000, completedAt: 1760000000000 }
 
-test('requires a choice for multiple chats and clears stale numbers after /clear or a workspace switch', async () => {
+test('defaults to the first chat, keeps the manual choice, and clears stale numbers after /clear', async () => {
   let chats = [a, b]
-  let focus: string | null = null
   let providerId = 'provider-a'
   const source: Sources = {
     listChats: async () => chats,
-    focusedChat: async () => focus,
     nativeContext: async (id) => id === b.id ? { kind: 'estimate', usedTokens: 12_345, windowTokens: 200_000, model: null, capturedAt: sample.completedAt } : null,
     geminiUsage: async () => null,
     nativeTurn: async () => ({ startedAt: 1000, completedAt: 4000, durationMs: 3000 }),
@@ -27,36 +25,80 @@ test('requires a choice for multiple chats and clears stale numbers after /clear
   let stop: (() => void) | undefined
   const worker = await mountWorker({ default: (orca) => { stop = start(orca, source, 0) }, deactivate: () => stop?.() }, { host })
   try {
-    const choosing = await worker.request('gauge.get')
-    assert.equal(choosing.phase, 'choose')
-    assert.equal(choosing.locale, 'zh-TW')
-    assert.equal((await worker.request('gauge.select', { id: 'unknown' })).selected, null)
-    const selected = await worker.request('gauge.select', { id: a.id })
-    assert.equal(selected.selected, a.id)
-    assert.deepEqual(selected.sample, sample)
-    assert.equal(selected.windowTokens, 1000)
-    providerId = 'after-clear'
-    const cleared = await worker.request('gauge.get')
-    assert.equal(cleared.phase, 'missing')
-    assert.equal(cleared.sample, null)
+    const first = await worker.request('gauge.get')
+    assert.deepEqual(first.chats, [a, b])
+    assert.equal(first.selected, a.id)
+    assert.equal(first.phase, 'ready')
+    assert.equal(first.locale, 'zh-TW')
+    assert.deepEqual(first.sample, sample)
+    assert.equal(first.windowTokens, 1000)
+    assert.equal((await worker.request('gauge.select', { id: 'unknown' })).selected, a.id)
     const other = await worker.request('gauge.select', { id: b.id })
+    assert.equal(other.selected, b.id)
     assert.equal(other.phase, 'ready')
     assert.equal(other.sample, null)
-    assert.equal(other.providerRate?.outputTokens,90)
-    assert.equal(other.turn?.durationMs,3000)
+    assert.equal(other.providerRate?.outputTokens, 90)
+    assert.equal(other.turn?.durationMs, 3000)
     assert.equal(other.context?.kind, 'estimate')
-    // Focus wins even though a is working and b was manually selected.
-    providerId = 'provider-a'; focus = a.id
-    const focusedA = await worker.request('gauge.get')
-    assert.equal(focusedA.following,true); assert.equal(focusedA.selected,a.id)
-    assert.deepEqual(focusedA.sample,sample); assert.equal(focusedA.providerRate,undefined)
-    focus = b.id
-    const focusedB = await worker.request('gauge.get')
-    assert.equal(focusedB.selected,b.id); assert.equal(focusedB.sample,null)
-    focus = 'other-workspace'
-    assert.equal((await worker.request('gauge.get')).phase,'choose')
+    // The choice is sticky: nothing re-selects a because it is first or working.
+    const sticky = await worker.request('gauge.get')
+    assert.equal(sticky.selected, b.id)
+    providerId = 'after-clear'
+    const cleared = await worker.request('gauge.select', { id: a.id })
+    assert.equal(cleared.phase, 'missing')
+    assert.equal(cleared.sample, null)
+    chats = [b]
+    assert.equal((await worker.request('gauge.get')).selected, b.id)
+    chats = [a, b]; await worker.request('gauge.select', { id: b.id })
+    chats = [a]
+    assert.equal((await worker.request('gauge.get')).selected, a.id)
     chats = []
     assert.equal((await worker.request('gauge.get')).phase, 'empty')
     assert.deepEqual(worker.refusals, [])
+  } finally { await worker.deactivate() }
+})
+
+test('remembers the choice per workspace and falls back to the first chat in another one', async () => {
+  const where = (id: string) => ({ workspaceId: id, branch: '', displayName: id, terminals: [] })
+  const rosters: Record<string, Chat[]> = { 'folder:one': [a, b], 'folder:two': [b, a] }
+  const source: Sources = {
+    listChats: async (workspace) => rosters[workspace], nativeContext: async () => null, nativeTurn: async () => null,
+    geminiUsage: async () => null, providerRate: async () => null,
+    resolveChat: async () => null, findTranscript: async () => null, makeTail: () => ({ read: async () => sample })
+  }
+  const host = mockHost({ results: { 'workspace.readContext': where('folder:one') } })
+  let stop: (() => void) | undefined
+  const worker = await mountWorker({ default: orca => { stop = start(orca, source, 0) }, deactivate: () => stop?.() }, { host })
+  try {
+    assert.equal((await worker.request('gauge.get')).selected, a.id)
+    assert.equal((await worker.request('gauge.select', { id: b.id })).selected, b.id)
+    host.respond('workspace.readContext', where('folder:two'))
+    assert.equal((await worker.request('gauge.get')).selected, b.id) // first of two; also unrelated to one's choice
+    assert.equal((await worker.request('gauge.select', { id: a.id })).selected, a.id)
+    host.respond('workspace.readContext', where('folder:one'))
+    assert.equal((await worker.request('gauge.get')).selected, b.id)
+    host.respond('workspace.readContext', where('folder:two'))
+    assert.equal((await worker.request('gauge.get')).selected, a.id)
+  } finally { await worker.deactivate() }
+})
+
+test('a manual choice bypasses the metric interval but not the roster interval', async () => {
+  let now = 0, lists = 0, metricReads = 0
+  const source: Sources = {
+    listChats: async () => { lists++; return [a, b] },
+    nativeContext: async () => { metricReads++; return null }, nativeTurn: async () => null,
+    geminiUsage: async () => null, providerRate: async () => null,
+    resolveChat: async () => ({ id: 'provider-a', config: null }), findTranscript: async () => 'example.jsonl',
+    makeTail: () => ({ read: async () => sample })
+  }
+  const host = mockHost({ results: { 'workspace.readContext': { workspaceId: 'folder:test', terminals: [], branch: '', displayName: 'Test' } } })
+  let stop: (() => void) | undefined
+  const worker = await mountWorker({ default: orca => { stop = start(orca, source, 60_000, () => now) }, deactivate: () => stop?.() }, { host })
+  try {
+    assert.equal((await worker.request('gauge.get')).selected, a.id)
+    now = 300; await worker.request('gauge.get'); assert.equal(metricReads, 1)
+    now = 600; const changed = await worker.request('gauge.select', { id: b.id })
+    assert.equal(changed.selected, b.id); assert.equal(changed.sample, null); assert.equal(metricReads, 2); assert.equal(lists, 1)
+    now = 3000; assert.equal((await worker.request('gauge.get')).selected, b.id); assert.equal(metricReads, 3); assert.equal(lists, 2)
   } finally { await worker.deactivate() }
 })

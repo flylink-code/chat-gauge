@@ -14,11 +14,10 @@ export type Sample = {
   durationMs: number | null
 }
 export type Snapshot = {
-  phase: 'loading' | 'unavailable' | 'empty' | 'choose' | 'waiting' | 'missing' | 'ready'
+  phase: 'loading' | 'unavailable' | 'empty' | 'waiting' | 'missing' | 'ready'
   locale: Locale
   chats: Chat[]
   selected: string | null
-  following?: true
   providerRate?: import('./provider-rate').ProviderRate
   turn?: import('./native-turn').NativeTurn
   messageUsage?: { model: string | null; inputTokens: number; outputTokens: number; completedAt: number }

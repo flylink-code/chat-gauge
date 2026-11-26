@@ -11,7 +11,7 @@ See local agents’ **context usage** in Orca’s status bar and right sidebar, 
 ## Try the prototype
 
 1. On Windows, use Orca **1.4.274 or later** with Plugins enabled. From this repository, run `orca plugin dev load . --json` and review the access Orca asks you to approve. Approve only if you trust the local code.
-2. Open a local native chat in Orca. Chat Gauge auto-selects a lone chat. With several chats, it follows the active native Chat tab in the workspace on the next refresh. When Orca does not identify a focused Chat, the panel offers a manual fallback; it never guesses from agent activity.
+2. Open a local native chat in Orca. Chat Gauge auto-selects a lone chat. With several chats, the panel shows one tab per chat in the workspace; the first chat is selected by default and the status bar shows the selected chat. Your choice is remembered per workspace. It does not follow Orca's focused tab yet, because Orca 1.4.274 gives plugins no live focus signal; it never guesses from agent activity.
 3. Select **Chat Gauge** in Orca’s right sidebar, or run `orca plugin open local.chat-gauge --panel chat-gauge`. The status item toggles the right sidebar. **Context Window (tokens)** defaults to `0` to use Orca’s reported limit, if available. A positive value overrides the window for whichever chat is selected.
 
 **Language:** Settings → Plugins → Chat Gauge → **Language / 语言**. Auto uses the Orca host’s system locale, not the chat content. The sidebar and status tooltip support English, Simplified Chinese, and Traditional Chinese; the status readout shows numbers and units only. Unsupported locales fall back to English.

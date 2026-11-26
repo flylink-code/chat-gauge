@@ -88,14 +88,12 @@ const NO_CONTEXT = snap({
   chats: [CHATS.claude], selected: 'example',
   sample: { model: 'gateway/example', inputTokens: 12000, outputTokens: 300, durationMs: 10000, completedAt: T0 }
 })
-const CHOOSE = snap({ phase: 'choose', chats: [CHATS.claude, CHATS.other, CHATS.agy], selected: null })
 const EMPTY = snap({ phase: 'empty' })
 
 const SCENARIOS = {
   detailed: { snapshot: DETAILED, byChat: { example: DETAILED, other: SWITCH_OTHER, agy: SWITCH_AGY } },
   missing: { snapshot: MISSING, byChat: { agy: MISSING } },
   'no-context': { snapshot: NO_CONTEXT, byChat: { example: NO_CONTEXT } },
-  choose: { snapshot: CHOOSE, byChat: { example: DETAILED, other: SWITCH_OTHER, agy: SWITCH_AGY } },
   empty: { snapshot: EMPTY, byChat: {} }
 }
 
@@ -601,7 +599,7 @@ async function waitPanelReady(cdp) {
     const s = await evaluate(cdp, `(() => {
       const h = window.__harness;
       if (!h) return null;
-      const sel = document.querySelector('#chat-select');
+      const sel = document.querySelector('#tabs');
       const bodyText = (document.body.innerText || '').trim();
       return {
         domReady: h.state.domReady,
@@ -629,8 +627,7 @@ const inspectScript = `(() => {
   const vh = document.documentElement.clientHeight;
   const rectOf = (e) => { const r = e.getBoundingClientRect(); return { x: +r.x.toFixed(1), y: +r.y.toFixed(1), w: +r.width.toFixed(1), h: +r.height.toFixed(1), right: +r.right.toFixed(1), bottom: +r.bottom.toFixed(1) }; };
   const styleOf = (e) => { const s = getComputedStyle(e); return { display: s.display, position: s.position, overflowX: s.overflowX, color: s.color, background: s.backgroundColor, borderStyle: s.borderTopStyle }; };
-  const select = q('#chat-select');
-  const picker = q('#picker');
+  const tablist = q('#tabs');
   const overview = q('#overview');
   const metrics = q('#metrics');
   const viewportOverflow = [];
@@ -685,8 +682,9 @@ const inspectScript = `(() => {
     bodyBg: getComputedStyle(document.body).backgroundColor,
     htmlBg: getComputedStyle(document.documentElement).backgroundColor,
     bodyColor: getComputedStyle(document.body).color,
-    select: select ? { value: select.value, disabled: select.disabled, options: [...select.options].map((o) => ({ value: o.value, text: norm(o.textContent), selected: o.selected, disabled: o.disabled })), rect: rectOf(select), style: styleOf(select) } : null,
-    picker: picker ? { hidden: picker.hidden, rect: rectOf(picker), style: styleOf(picker) } : null,
+    tabs: tablist ? { hidden: tablist.hidden, rect: rectOf(tablist), items: [...tablist.querySelectorAll('[role=tab]')].map((b) => ({ id: b.dataset.id, text: norm(b.textContent), title: b.title, selected: b.getAttribute('aria-selected') === 'true', tabIndex: b.tabIndex, rect: rectOf(b) })) } : null,
+    tabCount: document.querySelectorAll('#tabs [role=tab]').length,
+    heading: textOf(q('#session h1')),
     overview: overview ? { text: textOf(overview), rect: rectOf(overview), html: overview.innerHTML.slice(0, 3000) } : null,
     metrics: metrics ? { text: textOf(metrics), rect: rectOf(metrics), html: metrics.innerHTML.slice(0, 4000) } : null,
     bodyText: norm(document.body.innerText).slice(0, 8000),
@@ -734,7 +732,7 @@ function hasRate(text, value) {
   return forms.some((form) => new RegExp(`(^|[^\\d.])${form.replace('.', '\\.')}(?![\\d])`).test(text))
 }
 
-function checkCase({ scenario, theme, width, view, beforeSwitch, afterSwitch, expected, pickerOpened }) {
+function checkCase({ scenario, theme, width, view, beforeSwitch, afterSwitch, expected }) {
   const checks = []
   const add = (name, ok, detail) => checks.push({ name, ok: Boolean(ok), detail })
   const soft = (name, ok, detail) => checks.push({ name, ok: Boolean(ok), detail, soft: true })
@@ -746,7 +744,7 @@ function checkCase({ scenario, theme, width, view, beforeSwitch, afterSwitch, ex
   add('no element past its container', view.parentOverflow.length === 0, view.parentOverflow)
   add('#overview present', !!view.overview, view.overview ? view.overview.rect : null)
   add('#metrics present', !!view.metrics, view.metrics ? view.metrics.rect : null)
-  add('#chat-select present', !!view.select, view.select ? view.select.rect : null)
+  add('#tabs present', !!view.tabs, view.tabs ? view.tabs.rect : null)
   add('no page errors', view.errors.length === 0, view.errors)
   add('gauge.get requested', view.requests.some((r) => r.name === 'gauge.get'), view.requests.map((r) => r.name))
 
@@ -768,10 +766,16 @@ function checkCase({ scenario, theme, width, view, beforeSwitch, afterSwitch, ex
 
   const overviewText = view.overview?.text || ''
   const metricsText = view.metrics?.text || ''
-  const selectOptions = view.select?.options || []
-  add('chat options populated', selectOptions.length >= expected.chatCount, `${selectOptions.length} option(s): ${selectOptions.map((o) => o.text).join(' | ')}`)
+  const tabItems = view.tabs?.items || []
+  add('every chat has a tab', tabItems.length === expected.chatCount, `${tabItems.length} tab(s): ${tabItems.map((o) => o.text).join(' | ')}`)
+  add('tabs hidden only for a single chat', view.tabs?.hidden === (expected.chatCount < 2), `hidden=${view.tabs?.hidden}, chats=${expected.chatCount}`)
   if (expected.selected) {
-    add('selected chat marked', selectOptions.some((o) => o.value === expected.selected && o.selected), `selected="${view.select?.value}"`)
+    add('exactly the selected chat is marked', tabItems.filter((o) => o.selected).map((o) => o.id).join() === expected.selected, `selected="${tabItems.filter((o) => o.selected).map((o) => o.id)}"`)
+    add('only the selected tab is in the tab order', tabItems.filter((o) => o.tabIndex === 0).map((o) => o.id).join() === expected.selected, tabItems.map((o) => `${o.id}:${o.tabIndex}`))
+  }
+  if (expected.chatCount > 1) {
+    add('tabs fit the viewport', tabItems.every((o) => o.rect.x >= 0 && o.rect.right <= width + 1), tabItems.map((o) => `${o.id}:${o.rect.x}-${o.rect.right}`))
+    add('tab touch targets', tabItems.every((o) => o.rect.h >= 20), tabItems.map((o) => o.rect.h))
   }
 
   if (expected.used !== undefined) add('overview shows used tokens', hasNumber(overviewText, expected.used), `${expected.used} in "${overviewText.slice(0, 220)}"`)
@@ -812,9 +816,9 @@ function checkCase({ scenario, theme, width, view, beforeSwitch, afterSwitch, ex
   }
 
   if (beforeSwitch) {
-    add('switch control opened picker', pickerOpened, `picker hidden: ${beforeSwitch.picker?.hidden}`)
     add('chat switching changed post', afterSwitch.requests.some((r) => r.name === 'gauge.select' && r.input && r.input.id === expected.switchTo), afterSwitch.requests.map((r) => `${r.name}:${r.input?.id ?? ''}`))
-    add('select shows switched chat', afterSwitch.select?.value === expected.switchTo, `value="${afterSwitch.select?.value}"`)
+    add('tab marks switched chat', afterSwitch.tabs?.items.filter((o) => o.selected).map((o) => o.id).join() === expected.switchTo, `selected="${afterSwitch.tabs?.items.filter((o) => o.selected).map((o) => o.id)}"`)
+    add('switched header shows chat title', afterSwitch.tabs?.items.find((o) => o.id === expected.switchTo)?.text === afterSwitch.heading, `heading="${afterSwitch.heading}"`)
     add('overview changed after switch', afterSwitch.overview?.text !== beforeSwitch.overview?.text, `before="${(beforeSwitch.overview?.text || '').slice(0, 120)}" after="${(afterSwitch.overview?.text || '').slice(0, 120)}"`)
     if (expected.switchUsed !== undefined) add('switched overview shows new tokens', hasNumber(afterSwitch.overview?.text || '', expected.switchUsed), `${expected.switchUsed} in "${(afterSwitch.overview?.text || '').slice(0, 220)}"`)
     if (expected.switchRate !== undefined) add('switched metrics shows new rate', hasRate(afterSwitch.metrics?.text || '', expected.switchRate), `${expected.switchRate.toFixed(1)} tok/s in "${(afterSwitch.metrics?.text || '').slice(0, 220)}"`)
@@ -884,7 +888,7 @@ function pendingMessage(panelPath) {
     '  window.orca.plugin.on("gauge.changed", fn) -> { dispose() }',
     '  window.orca.on("theme", fn); orca.locale; orca.env.theme; orca.settings/storage/host',
     '  theme: <html class="dark"> for dark, no class + prefers-color-scheme for OS fallback',
-    '  expected DOM: <select id="chat-select">, #overview, #metrics',
+    '  expected DOM: #tabs (role=tablist, role=tab buttons), #overview, #metrics',
     '',
     'Re-run with --wait <seconds> to poll, or wire the files and run again.'
   ].join('\n')
@@ -978,53 +982,33 @@ async function main() {
       let beforeSwitch = null
       let afterSwitch = null
       let expectedSwitch = null
-      let pickerOpened = false
-      if (scenario === 'detailed' && view.select && view.select.options.length > 1 && (theme === 'light' || theme === 'dark')) {
-        const target = view.select.options.find((o) => o.value !== view.select.value && !o.disabled)
+      if (scenario === 'detailed' && view.tabs && view.tabs.items.length > 1 && (theme === 'light' || theme === 'dark')) {
+        const target = view.tabs.items.find((o) => !o.selected)
         if (target) {
           beforeSwitch = view
-          // Use the real control first: "Switch chat" reveals the picker.
-          const opened = await evaluate(cdp, `(() => {
-            const picker = document.getElementById('picker');
-            if (!picker) return { ok: false, reason: 'no #picker' };
-            if (!picker.hidden) return { ok: true, already: true };
-            const toggle = document.getElementById('change-chat');
-            if (!toggle) return { ok: false, reason: 'no #change-chat control' };
-            toggle.click();
-            return { ok: true, clicked: true };
-          })()`)
-          if (!opened.ok) throw new Error(`chat picker failed: ${opened.reason}`)
-          await waitFor(
-            () => evaluate(cdp, `!document.getElementById('picker')?.hidden`),
-            4000, 50, 'chat picker to open'
-          )
-          pickerOpened = true
           if (opts.screenshots && width === 320) {
             const shot = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false })
-            await fsp.writeFile(path.join(OUT_DIR, `${scenario}-${theme}-${width}-picker.png`), Buffer.from(shot.data, 'base64'))
+            await fsp.writeFile(path.join(OUT_DIR, `${scenario}-${theme}-${width}-tabs.png`), Buffer.from(shot.data, 'base64'))
           }
+          // Click the real tab, as a person would.
           const switched = await evaluate(cdp, `(() => {
-            const s = document.getElementById('chat-select');
-            if (!s) return { ok: false, reason: 'no #chat-select' };
-            const option = [...s.options].find((o) => o.value === ${JSON.stringify(target.value)});
-            if (!option) return { ok: false, reason: 'option missing' };
-            s.value = option.value;
-            s.dispatchEvent(new Event('input', { bubbles: true }));
-            s.dispatchEvent(new Event('change', { bubbles: true }));
-            return { ok: true, value: s.value };
+            const tab = [...document.querySelectorAll('#tabs [role=tab]')].find((b) => b.dataset.id === ${JSON.stringify(target.id)});
+            if (!tab) return { ok: false, reason: 'tab missing' };
+            tab.click();
+            return { ok: true };
           })()`)
           if (!switched.ok) throw new Error(`chat switch failed: ${switched.reason}`)
           await waitFor(async () => {
-            const s = await evaluate(cdp, `({ inflight: window.__harness.state.inflight, value: document.getElementById('chat-select')?.value, text: (document.querySelector('#overview')?.innerText || '') })`)
-            return s.inflight === 0 && s.value === target.value && s.text.length > 0
+            const s = await evaluate(cdp, `({ inflight: window.__harness.state.inflight, value: document.querySelector('#tabs [aria-selected=true]')?.dataset.id, text: (document.querySelector('#overview')?.innerText || '') })`)
+            return s.inflight === 0 && s.value === target.id && s.text.length > 0
           }, 10000, 100, 'chat switch to settle')
           await waitFor(async () => {
             const reqs = await evaluate(cdp, 'window.__harness.state.requests.slice(-12)')
-            return reqs.some((r) => r.name === 'gauge.select' && r.input && r.input.id === target.value)
+            return reqs.some((r) => r.name === 'gauge.select' && r.input && r.input.id === target.id)
           }, 5000, 100, 'gauge.select request')
           await delay(250)
           afterSwitch = await evaluate(cdp, inspectScript)
-          expectedSwitch = target.value
+          expectedSwitch = target.id
           if (opts.screenshots) {
             const shot = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false })
             await fsp.writeFile(path.join(OUT_DIR, `${scenario}-${theme}-${width}-switch.png`), Buffer.from(shot.data, 'base64'))
@@ -1042,14 +1026,14 @@ async function main() {
       }
       const checks = checkCase({
         scenario, theme: theme === 'auto' ? 'auto' : theme, width, view,
-        beforeSwitch, afterSwitch, expected, pickerOpened
+        beforeSwitch, afterSwitch, expected
       })
       results.push({
         scenario, theme, width, osScheme: autoScheme || theme,
         url, checks,
         view: {
           title: view.title, htmlClass: view.htmlClass, bodyBg: view.bodyBg, bodyColor: view.bodyColor,
-          select: view.select, overview: view.overview?.text, metrics: view.metrics?.text,
+          tabs: view.tabs, overview: view.overview?.text, metrics: view.metrics?.text,
           viewportOverflow: view.viewportOverflow, parentOverflow: view.parentOverflow,
           map: view.map, errors: view.errors, requests: view.requests
         },
@@ -1114,7 +1098,6 @@ function buildExpectations(scenario, selectedId = 'example') {
     return { chatCount: 1, selected: 'example', rate: 30, cacheMissing: true, used: undefined }
   }
   if (scenario === 'empty') return { chatCount: 0 }
-  if (scenario === 'choose') return { chatCount: 3 }
   return {}
 }
 
