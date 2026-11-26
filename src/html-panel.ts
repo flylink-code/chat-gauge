@@ -5,9 +5,9 @@ import { disposeMap, renderMap } from './html-map'
 import { rateCopy } from './rate-copy'
 
 const extra = {
-  en: { change: 'Switch chat', why: 'Why is this unavailable?', na: 'Unavailable', noMap: 'No category breakdown', buffer: 'Reserved for compaction', manual: 'Custom limit', failed: 'Could not switch chats.' },
-  'zh-CN': { change: '切换对话', why: '为什么没有？', na: '暂无', noMap: '没有分类明细', buffer: '压缩预留', manual: '手动上限', failed: '未能切换对话。' },
-  'zh-TW': { change: '切換對話', why: '為什麼沒有？', na: '暫無', noMap: '沒有分類明細', buffer: '壓縮預留', manual: '手動上限', failed: '未能切換對話。' }
+  en: { why: 'Why is this unavailable?', na: 'Unavailable', noMap: 'No category breakdown', buffer: 'Reserved for compaction', manual: 'Custom limit', failed: 'Could not switch chats.' },
+  'zh-CN': { why: '为什么没有？', na: '暂无', noMap: '没有分类明细', buffer: '压缩预留', manual: '手动上限', failed: '未能切换对话。' },
+  'zh-TW': { why: '為什麼沒有？', na: '暫無', noMap: '沒有分類明細', buffer: '壓縮預留', manual: '手動上限', failed: '未能切換對話。' }
 }
 const stateLabels = new Map(Object.entries({ working: 'working', done: 'idle', waiting: 'waitingState', blocked: 'blocked' } as const))
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: string) {
@@ -16,13 +16,45 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: stri
   if (text !== undefined) node.textContent = text
   return node
 }
-const session = document.getElementById('session')!, picker = document.getElementById('picker')!
-const select = document.querySelector<HTMLSelectElement>('#chat-select')!, content = document.getElementById('content')!
+const session = document.getElementById('session')!, tabs = document.getElementById('tabs')!, content = document.getElementById('content')!
 let snapshot: Snapshot = { ...emptySnapshot, locale: resolveLocale('auto', window.orca?.locale) }
 let mode: 'used' | 'window' = 'used'
-let picking = false, pending = false, revision = 0, optionsKey = ''
+let revision = 0, tabsKey = ''
 let mountedMap: HTMLElement | null = null
-const pickerError = el('p','note'); pickerError.setAttribute('role','alert'); picker.append(pickerError)
+const tabError = el('p','note'); tabError.setAttribute('role','alert'); tabError.hidden = true; tabs.after(tabError)
+const failure = (text: string) => { tabError.textContent = text; tabError.hidden = !text }
+
+function paintTabs() {
+  const { chats, selected, locale } = snapshot
+  tabs.hidden = chats.length < 2
+  tabs.setAttribute('aria-label', messages(locale).selectChat)
+  const key = JSON.stringify([locale, selected, chats.map(a => [a.id, a.agent, a.title, a.state])])
+  if (key === tabsKey) return
+  tabsKey = key
+  const had = tabs.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.id : undefined
+  tabs.replaceChildren(...chats.map(a => {
+    const tab = el('button', 'tab'), on = a.id === selected
+    tab.type = 'button'; tab.dataset.id = a.id; tab.title = `${agentLabel(a.agent)} · ${a.title}`
+    tab.setAttribute('role', 'tab'); tab.setAttribute('aria-selected', String(on)); tab.tabIndex = on ? 0 : -1
+    tab.append(el('i', a.state === 'working' ? 'dot working' : 'dot'), el('span', 'tab-title', a.title))
+    tab.onclick = () => void choose(a.id)
+    return tab
+  }))
+  if (had) tabs.querySelector<HTMLElement>(`[data-id="${CSS.escape(had)}"]`)?.focus({ preventScroll: true })
+}
+tabs.onkeydown = (event) => {
+  const keys: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1, Home: 0, End: 0 }
+  if (!(event.key in keys)) return
+  const ids = snapshot.chats.map(a => a.id), at = ids.indexOf(snapshot.selected ?? '')
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? ids.length - 1 : (at + keys[event.key] + ids.length) % ids.length
+  event.preventDefault(); tabs.querySelector<HTMLElement>(`[data-id="${CSS.escape(ids[next])}"]`)?.focus(); void choose(ids[next])
+}
+async function choose(id: string) {
+  if (id === snapshot.selected) return
+  const started = revision; failure('')
+  try { const next = await window.orca.plugin.request('gauge.select', { id }); if (revision === started) accept(next) }
+  catch { failure(extra[snapshot.locale].failed) }
+}
 
 function paint() {
   const { chats, selected, locale, sample, context, phase } = snapshot
@@ -31,7 +63,7 @@ function paint() {
   const m = metrics(snapshot)
   document.documentElement.lang = locale
   const focus = document.activeElement as HTMLElement | null
-  const focusKey = focus?.id || '', restoreSelect = focus === select
+  const focusKey = focus?.id || ''
   const focusedSummary = focus?.tagName === 'SUMMARY' ? focus.textContent : null
   const expanded = new Set(Array.from(content.querySelectorAll('details[open]')).map(n => (n as HTMLElement).dataset.state || n.querySelector('summary')?.textContent))
   if (mountedMap) { disposeMap(mountedMap); mountedMap = null }
@@ -41,19 +73,7 @@ function paint() {
     const state = el('span','pill'); state.append(el('i', chat.state === 'working' ? 'dot working' : 'dot'),t[stateLabels.get(chat.state) ?? 'unknown'])
     meta.append(el('span','pill',agentLabel(chat.agent)), state)
   }
-  const showPicker = !snapshot.following && chats.length > 1 && (!chat || picking)
-  if (snapshot.following) meta.append(el('span','pill', { en: 'Following active chat', 'zh-CN': '跟随当前对话', 'zh-TW': '跟隨目前對話' }[locale]))
-  if (chat && chats.length > 1 && !snapshot.following) {
-    const toggle = el('button','switch',x.change); toggle.id = 'change-chat'; toggle.setAttribute('aria-controls','picker'); toggle.setAttribute('aria-expanded',String(showPicker))
-    toggle.onclick = () => { picking = !picking; paint(); if (picking) select.focus(); else document.getElementById('change-chat')?.focus() }; meta.append(toggle)
-  }
-  session.replaceChildren(title,meta); picker.hidden = !showPicker
-  picker.querySelector('label')!.textContent = t.selectChat
-  const key = JSON.stringify([locale,chats.map(a => [a.id,a.agent,a.title])]); if (optionsKey !== key) {
-    optionsKey = key; const placeholder = new Option(t.chooseChat,''); placeholder.disabled = true
-    select.replaceChildren(placeholder,...chats.map(a => new Option(`${agentLabel(a.agent)} · ${a.title} · ${a.id.slice(0,8)}`,a.id)))
-  }
-  select.value = selected ?? ''; select.disabled = pending
+  session.replaceChildren(title,meta); paintTabs()
   const frag = document.createDocumentFragment()
   if (!chat || (m.used === null && !sample && !snapshot.turn && !m.rate)) {
     const p = el('p','notice',t[phase]); p.setAttribute('role','status'); frag.append(p)
@@ -106,22 +126,15 @@ function paint() {
   }
   content.replaceChildren(frag)
   for (const d of Array.from(content.querySelectorAll('details'))) if (expanded.has(d.dataset.state || d.querySelector('summary')?.textContent)) d.open = true
-  const target = restoreSelect && !picker.hidden ? select
-    : focusedSummary ? Array.from(content.querySelectorAll('summary')).find(s => s.textContent === focusedSummary)
+  const target = focusedSummary ? Array.from(content.querySelectorAll('summary')).find(s => s.textContent === focusedSummary)
     : focusKey ? document.getElementById(focusKey) : null
   target?.focus({preventScroll:true})
 }
 function accept(next: Snapshot) {
   if (next.selected !== snapshot.selected) {
-    mode = 'used'; picking = false; pickerError.textContent = ''; content.replaceChildren()
+    mode = 'used'; failure(''); content.replaceChildren()
   }
   snapshot=next; paint()
-}
-select.onchange = async () => {
-  const id = select.value, started = revision; pending=true; select.disabled=true; pickerError.textContent = ''
-  try {const next = await window.orca.plugin.request('gauge.select',{id}); if (revision === started) accept(next)}
-  catch { pickerError.textContent = extra[snapshot.locale].failed }
-  finally { pending=false; select.disabled=false; select.value=snapshot.selected ?? ''; if (picker.hidden) document.getElementById('change-chat')?.focus() }
 }
 paint()
 const initialRevision=revision

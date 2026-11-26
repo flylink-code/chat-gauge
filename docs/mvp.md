@@ -8,7 +8,7 @@
 
 ## 实施顺序与验收
 
-1. **会话绑定**：用 `workspace.readContext` 获取焦点工作区 ID，再用本机 `orca agent list --worktree=<ID> --json` 获取工作区里的 Chat；从 Orca 会话元数据只读解析 provider ID，只找同名 Claude 主转录文件。单会话自动读，多会话手动选；无匹配、格式漂移、重复文件均显示原因，不回落到其他会话。切换工作区或 `/clear` 不沿用旧会话数据。
+1. **会话绑定**：用 `workspace.readContext` 获取焦点工作区 ID，再用本机 `orca agent list --worktree=<ID> --json` 获取工作区里的 Chat；从 Orca 会话元数据只读解析 provider ID，只找同名 Claude 主转录文件。单会话自动读，多会话显示全部对话标签、默认选第一个并按工作区记住手动选择；无匹配、格式漂移、重复文件均显示原因，不回落到其他会话。切换工作区或 `/clear` 不沿用旧会话数据。
 2. **指标采集**：有界增量读取 JSONL，处理不完整行、重复 assistant 块和文件截断。用最近一次已完成请求的输入（含 cache）+ 输出作为上下文快照；窗口默认未知，设置后才显示占比。平均吞吐使用 `输出 token ÷ (完成时间 − 请求开始时间)`，近似且含首 token 等待；没有可配对的请求时间不显示速度。不计算 TTFT、decode rate 或逐 token 流速。
 3. **界面**：使用 Orca Components，自适应卡片 + 单值上下文条，不做时间序列图。状态栏简短显示，点击切换右侧栏；详情随 worker 快照更新。同工作区多 Chat 时不把最近活动误作当前焦点；选定会话后状态栏和面板保持一致。
 4. **验收**：在 Orca 1.4.274 运行 manifest 验证、TypeScript 检查、合成输入测试和面板渲染检查；用本机现有 Chat 的 ID 和日志验证数据链路，只输出统计字段。真实窗口需单独授权 `trusted-worker`，未经批准不加载运行。不提交或推送。

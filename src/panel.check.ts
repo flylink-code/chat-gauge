@@ -24,7 +24,7 @@ export default defineCheck({
   'high context': { requests: { 'gauge.get': () => ready } },
   'simplified chinese': { requests: { 'gauge.get': () => ({ ...ready, locale: 'zh-CN' }) } },
   'traditional chinese': { requests: { 'gauge.get': () => ({ ...ready, locale: 'zh-TW' }) } },
-  'select chat': { requests: { 'gauge.get': () => ({ ...emptySnapshot, phase: 'choose', chats: [...ready.chats, { id: 'other', title: 'Other chat', state: 'done', agent: 'pi' }] }) } },
+  'chat tabs': { requests: { 'gauge.get': () => ({ ...ready, chats: [...ready.chats, { id: 'other', title: 'Other chat', state: 'done', agent: 'pi' }] }) } },
   'context only': { requests: { 'gauge.get': () => ({
     ...ready, sample: null, windowTokens: null,
     chats: [{ id: 'example', title: 'A long Antigravity conversation title to fit in a narrow sidebar', state: 'working', agent: 'antigravity' }],

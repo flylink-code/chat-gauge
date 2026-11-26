@@ -15,6 +15,11 @@ updated: 2026-11-25
 - 新接口已完成合成测试。真实本机既有历史验证了 Antigravity 的当前成功轮次和可匹配的整轮吞吐；没有发起模型请求。其他各家的本机端到端覆盖不等同于格式适配，见矩阵。
 - 回归：`npm run typecheck`、`npm test`、`npm run check`、`orca plugin validate . --json`。真实开发插件可用 `orca plugin shot local.chat-gauge --panel chat-gauge --width 320 --json`。
 
+## 0.3.1 候选（PR #2）
+
+- 多对话：面板顶部列出全部 Chat 标签，默认第一个，手动选择按工作区记住；不再自动跟随 Orca 焦点（ADR 0002，归档卡 chat-focus-follow.md）。src/chat-focus.ts 保留未接入。
+- 回归：pm run typecheck、pm test（90 项）、ode scripts/check-panel.mjs（含点击标签切换）通过；真实桌面窗口尚未复测，未打 0.3.1 标签。
+
 ## 下一步
 
 1. 在真实 Codex、OpenCode 1.x/2.x、Copilot、Pi、Gemini 原生会话上核对账号绑定、完成时刻与显示口径。不同步时宁可留空，不扩大匹配范围。

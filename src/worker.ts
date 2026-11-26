@@ -2,17 +2,18 @@ import type { OrcaWorkerApi } from 'orca/worker'
 import { status } from './format'
 import { resolveLocale } from './i18n'
 import { emptySnapshot, type Snapshot } from './protocol'
-import { findTranscript, focusedChat, listChats, nativeContext, nativeTurn, resolveChat } from './source'
+import { findTranscript, listChats, nativeContext, nativeTurn, resolveChat } from './source'
 import { geminiUsage, providerRate } from './provider-sources'
 import { TranscriptTail } from './tail'
 import { tokenCount } from './transcript'
 
-const sources = { listChats, focusedChat, nativeContext, nativeTurn, providerRate, geminiUsage, resolveChat, findTranscript, makeTail: (path: string, id: string) => new TranscriptTail(path, id) }
+const sources = { listChats, nativeContext, nativeTurn, providerRate, geminiUsage, resolveChat, findTranscript, makeTail: (path: string, id: string) => new TranscriptTail(path, id) }
 export type Sources = Omit<typeof sources, 'makeTail'> & { makeTail: (path: string, id: string) => Pick<TranscriptTail, 'read'> }
 
 export function start(orca: OrcaWorkerApi, source: Sources, pollMs = 300, clock = () => performance.now()): () => void {
   let disposed = false
-  let selected: string | null = null
+  // Manual choice per workspace; Orca exposes no live focused-Chat signal, so nothing guesses it.
+  const chosen = new Map<string, string>()
   let previousWorkspace: string | null = null
   let snapshot = emptySnapshot
   let flight: Promise<Snapshot> | null = null
@@ -35,7 +36,7 @@ export function start(orca: OrcaWorkerApi, source: Sources, pollMs = 300, clock 
       const context = await orca.host.call('workspace.readContext')
       const workspace = context?.workspaceId ?? null
       const switched = workspace !== previousWorkspace
-      if (switched) { selected = null; tail = null; roster = null; previousWorkspace = workspace; metricsUntil = 0 }
+      if (switched) { tail = null; roster = null; previousWorkspace = workspace; metricsUntil = 0 }
       if (workspace) {
         if (!roster || roster.workspace !== workspace || pollMs === 0) {
           roster = { workspace, chats: await source.listChats(workspace), until: clock() + 1500 }
@@ -48,21 +49,17 @@ export function start(orca: OrcaWorkerApi, source: Sources, pollMs = 300, clock 
         }
         next.chats = roster.chats
       }
-      if (selected && !next.chats.some((chat) => chat.id === selected)) selected = null
-      const focus = workspace && next.chats.length > 1 ? await source.focusedChat?.(workspace, next.chats).catch(() => null) : null
-      const following = !!focus && next.chats.some(chat => chat.id === focus)
-      if (following) selected = null // manual choice is a fallback, not a sticky pin
-      next.selected = following ? focus : selected ?? (next.chats.length === 1 ? next.chats[0].id : null)
-      if (following) next.following = true
+      const pick = workspace ? chosen.get(workspace) : undefined
+      next.selected = next.chats.find((chat) => chat.id === pick)?.id ?? next.chats[0]?.id ?? null
       if (!next.selected) {
         tail = null
-        next.phase = next.chats.length ? 'choose' : 'empty'
+        next.phase = 'empty'
         return next
       }
       next.windowTokens = preferences.windowTokens
-      // Focus is cheap and time-sensitive; expensive provider reads keep their own cadence.
+      // Expensive provider reads keep their own cadence while the same chat stays selected.
       if (!switched && pollMs > 0 && clock() < metricsUntil && snapshot.selected === next.selected && snapshot.phase !== 'unavailable') {
-        return { ...snapshot, chats: next.chats, following: next.following, locale: next.locale, windowTokens: next.windowTokens }
+        return { ...snapshot, chats: next.chats, locale: next.locale, windowTokens: next.windowTokens }
       }
       metricsUntil = clock() + 2000
       const chat = next.chats.find((row) => row.id === next.selected)
@@ -129,7 +126,7 @@ export function start(orca: OrcaWorkerApi, source: Sources, pollMs = 300, clock 
   orca.panels.handle('gauge.select', async ({ id }) => {
     if (flight) await flight
     if (!snapshot.chats.some((chat) => chat.id === id)) return snapshot
-    selected = id
+    if (previousWorkspace) chosen.set(previousWorkspace, id)
     return refresh()
   })
   if (pollMs > 0) timer = setInterval(() => void refresh(), pollMs)
