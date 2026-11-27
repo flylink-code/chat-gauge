@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { assert, test } from 'orca/testing'
+import { DatabaseSync } from 'node:sqlite'
 import { readAgyRate, readAgySteps } from './agy-metrics'
 
 const nativeId = '00000000-0000-0000-0000-000000000001'
@@ -197,4 +198,90 @@ test('requires contiguous chunks but can read them when the merged file is gone'
   await rename(join(chunks, '00000001.jsonl'), join(chunks, '00000000.jsonl'))
   await rm(join(logs, 'transcript.jsonl'))
   assert.equal((await readAgyRate(record(home), window))?.outputTokens, 100)
+}))
+
+// agy stores one protobuf blob per model call; these helpers build the same shape.
+const varint = (value: number): number[] => {
+  const out: number[] = []
+  let rest = value
+  while (rest >= 0x80) { out.push((rest % 0x80) | 0x80); rest = Math.floor(rest / 0x80) }
+  return [...out, rest]
+}
+const field = (num: number, payload: number[]): number[] => [...varint(num * 8 + 2), ...varint(payload.length), ...payload]
+const intField = (num: number, value: number): number[] => [...varint(num * 8), ...varint(value)]
+const duration = (ms: number): number[] => [...intField(1, Math.floor(ms / 1000)), ...intField(2, (ms % 1000) * 1_000_000)]
+const genBlob = (output: number, firstMs: number | null, streamMs: number | null): Buffer => Buffer.from(field(1, [
+  ...field(4, intField(3, output)),
+  ...(firstMs === null ? [] : field(11, duration(firstMs))),
+  ...(streamMs === null ? [] : field(12, duration(streamMs)))
+]))
+
+type GenRow = { output: number; first: number | null; stream: number | null }
+function writeDatabase(home: string, planners: readonly number[], gens: readonly GenRow[], id = nativeId) {
+  const dir = join(home, 'antigravity-cli', 'conversations')
+  return mkdir(dir, { recursive: true }).then(() => {
+    const db = new DatabaseSync(join(dir, `${id}.db`))
+    try {
+      db.exec('CREATE TABLE steps (idx INTEGER, step_type INTEGER); CREATE TABLE gen_metadata (idx INTEGER, data BLOB, size INTEGER)')
+      let step = 0
+      for (const planner of planners) {
+        for (; step < planner; step++) db.prepare('INSERT INTO steps VALUES (?, 1)').run(step)
+        db.prepare('INSERT INTO steps VALUES (?, 15)').run(planner)
+        step++
+      }
+      gens.forEach((gen, index) => db.prepare('INSERT INTO gen_metadata VALUES (?, ?, 0)').run(index, genBlob(gen.output, gen.first, gen.stream)))
+    } finally { db.close() }
+  })
+}
+
+const decodeRows = [user(t0), planner(1, t0 + 1000, 100, { tool_calls: [{ name: 'run_command' }] }), generic(2, t0 + 1500), planner(3, t0 + 2000, 50)]
+const decodeWindow = turn(t0 + 250, 3750, t0 + 4000)
+
+test('adds streaming decode speed only when every call matches the conversation database', () => fixture(async (home) => {
+  await writeSession(home, decodeRows)
+  await writeDatabase(home, [1, 3], [{ output: 100, first: 2000, stream: 2000 }, { output: 50, first: 1000, stream: 500 }])
+  const rate = await readAgyRate(record(home), decodeWindow)
+  assert.deepEqual(rate, {
+    scope: 'turn', outputTokens: 150, durationMs: 3750, completedAt: t0 + 4000,
+    decode: { outputTokens: 150, streamMs: 2500, firstTokenMs: 1500, calls: 2 }
+  })
+}))
+
+test('keeps the turn average when the conversation database is missing or disagrees', () => fixture(async (home) => {
+  await writeSession(home, decodeRows)
+  const average = { scope: 'turn', outputTokens: 150, durationMs: 3750, completedAt: t0 + 4000 }
+  assert.deepEqual(await readAgyRate(record(home), decodeWindow), average)
+
+  const cases: [number[], GenRow[]][] = [
+    // Output count differs from the transcript.
+    [[1, 3], [{ output: 100, first: 2000, stream: 2000 }, { output: 51, first: 1000, stream: 500 }]],
+    // A call without stream time cannot be averaged.
+    [[1, 3], [{ output: 100, first: 2000, stream: null }, { output: 50, first: 1000, stream: 500 }]],
+    // Planner rows and timing rows disagree in number.
+    [[1, 3], [{ output: 100, first: 2000, stream: 2000 }]],
+    // The bound call is not among the database's planner steps.
+    [[1, 4], [{ output: 100, first: 2000, stream: 2000 }, { output: 50, first: 1000, stream: 500 }]]
+  ]
+  for (const [planners, gens] of cases) {
+    await rm(join(home, 'antigravity-cli', 'conversations'), { recursive: true, force: true })
+    await writeDatabase(home, planners, gens)
+    assert.deepEqual(await readAgyRate(record(home), decodeWindow), average)
+  }
+
+  // Not a database at all.
+  await rm(join(home, 'antigravity-cli', 'conversations'), { recursive: true, force: true })
+  await mkdir(join(home, 'antigravity-cli', 'conversations'), { recursive: true })
+  await writeFile(join(home, 'antigravity-cli', 'conversations', `${nativeId}.db`), 'not sqlite')
+  assert.deepEqual(await readAgyRate(record(home), decodeWindow), average)
+}))
+
+test('omits first-token latency when no call reports one', () => fixture(async (home) => {
+  await writeSession(home, decodeRows)
+  await writeDatabase(home, [1, 3], [{ output: 100, first: null, stream: 2000 }, { output: 50, first: null, stream: 500 }])
+  assert.equal((await readAgyRate(record(home), decodeWindow))?.decode?.firstTokenMs, null)
+}))
+test('does not report a decode speed for a sub-second stream', () => fixture(async (home) => {
+  await writeSession(home, decodeRows)
+  await writeDatabase(home, [1, 3], [{ output: 100, first: 2000, stream: 300 }, { output: 50, first: 1000, stream: 200 }])
+  assert.equal((await readAgyRate(record(home), decodeWindow))?.decode, undefined)
 }))

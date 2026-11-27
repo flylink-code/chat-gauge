@@ -25,6 +25,13 @@ export default defineCheck({
   'simplified chinese': { requests: { 'gauge.get': () => ({ ...ready, locale: 'zh-CN' }) } },
   'traditional chinese': { requests: { 'gauge.get': () => ({ ...ready, locale: 'zh-TW' }) } },
   'chat tabs': { requests: { 'gauge.get': () => ({ ...ready, chats: [...ready.chats, { id: 'other', title: 'Other chat', state: 'done', agent: 'pi' }] }) } },
+  'antigravity decode': { requests: { 'gauge.get': () => ({
+    ...ready, locale: 'zh-CN', sample: null, windowTokens: null,
+    chats: [{ id: 'example', title: 'Antigravity decode sample', state: 'done', agent: 'antigravity' }],
+    context: { kind: 'estimate', usedTokens: 138_881, windowTokens: 1_048_576, model: null, capturedAt: 1760000000000 },
+    providerRate: { scope: 'turn', outputTokens: 11_144, durationMs: 130_000, completedAt: 1760000000000,
+      decode: { outputTokens: 11_144, streamMs: 100_839, firstTokenMs: 15_634, calls: 3 } }
+  }) } },
   'context only': { requests: { 'gauge.get': () => ({
     ...ready, sample: null, windowTokens: null,
     chats: [{ id: 'example', title: 'A long Antigravity conversation title to fit in a narrow sidebar', state: 'working', agent: 'antigravity' }],

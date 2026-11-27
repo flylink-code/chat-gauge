@@ -102,6 +102,7 @@ function paint() {
     const rate = el('section',`metric${m.rate ? '' : ' unavailable'}`); rate.append(el('h2','',t.throughput),el('b','reading',m.rate ?? x.na))
     if (m.rate) rate.append(el('p','note',m.rateNote)); else { const why = el('details'); why.dataset.state = 'rate'; why.append(el('summary','',x.why),el('p','note',agy ? c.agyRate : t.timingUnavailable)); rate.append(why) }
     cards.append(rate)
+    if (m.decode) { const card = el('section','metric'); card.append(el('h2','',rateCopy[locale].decode),el('b','reading',m.decode.rate),el('p','note',rateCopy[locale].decodeNote.replace('{n}',String(m.decode.calls))),...(m.decode.first ? [el('p','note',`${rateCopy[locale].firstToken}: ${m.decode.first}`)] : [])); cards.append(card) }
     if (snapshot.turn) {
       const clock = el('section','metric'); clock.append(el('h2','',rateCopy[locale].elapsed),el('b','reading',`${(snapshot.turn.durationMs/1000).toFixed(2)} s`),el('p','note',`${rateCopy[locale].finished} · ${localTimestamp(snapshot.turn.completedAt,locale)}`)); cards.append(clock)
     }

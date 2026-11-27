@@ -5,7 +5,7 @@
 | Agent | 已接入的吞吐或用量 | 验证范围 |
 | --- | --- | --- |
 | Claude Code | 已完成请求的输出 / 请求耗时（含首 token 等待）；缓存与上下文构成 | 合成测试、本机 Chat |
-| Antigravity（agy） | 可唯一匹配的根轮次：主模型各步输出之和 / Orca 整轮耗时；不含子 Agent，不是解码速度 | 合成测试、本机历史，见 [证据和限制](../agent/context/research/agy-throughput.md) |
+| Antigravity（agy） | 可唯一匹配的根轮次：主模型各步输出之和 / Orca 整轮耗时；不含子 Agent，不是解码速度；另在 `gen_metadata` 逐调用核对一致时显示「解码速度」（仅流式时长，见 `agy-context-plugin.md`） | 合成测试、本机历史，见 [证据和限制](../agent/context/research/agy-throughput.md) |
 | Codex | 已完成 rollout 轮次的输出 / 轮次耗时 | 合成测试 |
 | OpenCode、OpenCode 2 | 选中账号和会话 SQLite 的已完成 assistant 消息：输出 / 消息耗时 | 两版及迁移、托管账号均有合成测试 |
 | GitHub Copilot | 根会话完成调用的输出与耗时，排除子 Agent；状态提示按消息平均标注 | 合成测试；本机 CLI 记录字段已核对，未验证 Orca 端到端 |

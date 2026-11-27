@@ -4,6 +4,8 @@ updated: 2026-11-25
 topic: Antigravity 原生 Chat 的吞吐来源
 ---
 
+> 2026-11-27 更新：「会话库未解码」「单步计时不可用」已被 [agy-context-plugin.md](agy-context-plugin.md) 取代；逐调用计时来自 `gen_metadata`。下文为 2026-11-25 的记录。
+
 ## 问题
 
 Antigravity CLI 有输出 token 指标时，Orca 原生 Chat 插件为何仍无法显示 tok/s？

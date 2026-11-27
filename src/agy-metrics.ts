@@ -1,7 +1,8 @@
 import { Buffer } from 'node:buffer'
 import { lstat, open, readdir, type FileHandle } from 'node:fs/promises'
 import { isAbsolute, join, resolve, sep } from 'node:path'
-import type { ProviderRate } from './provider-rate'
+import { readGenCalls } from './agy-gen'
+import type { AgyDecode, ProviderRate } from './provider-rate'
 import { isRecord, tokenCount } from './transcript'
 
 /**
@@ -51,6 +52,7 @@ const BRAIN_ROOTS = ['antigravity-acp', 'antigravity-cli'] as const
 const MAX_TRANSCRIPT_BYTES = 8 * 1024 * 1024
 const MAX_CHUNKS = 4096
 const MATCH_MS = 1000
+const MIN_STREAM_MS = 1000
 
 const safeInteger = (value: unknown): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value)
@@ -288,22 +290,51 @@ function bind(rows: Row[], turn: AgyTurn): Bound | null {
   return { turn, steps, outputTokens: total }
 }
 
-async function readBound(record: unknown, turn: AgyTurn): Promise<Bound | null> {
+type Located = { bound: Bound; database: string }
+
+async function readBound(record: unknown, turn: AgyTurn): Promise<Located | null> {
   const binding = decodeBinding(record)
   const window = decodeTurn(turn)
   if (!binding || !window) return null
   const home = resolve(binding.home)
-  const evidence: Evidence[] = []
+  const evidence: { root: string; found: Evidence }[] = []
   for (const root of BRAIN_ROOTS) {
     const found = await sessionEvidence(join(home, root), binding.nativeId)
-    if (found) evidence.push(found)
+    if (found) evidence.push({ root, found })
   }
   // Two live homes for one native ID make the primary transcript ambiguous.
   if (evidence.length !== 1) return null
-  const bytes = await readTail(evidence[0])
+  const bytes = await readTail(evidence[0].found)
   if (!bytes) return null
   const rows = parseRows(bytes)
-  return rows ? bind(rows, window) : null
+  const bound = rows ? bind(rows, window) : null
+  return bound ? { bound, database: join(home, evidence[0].root, 'conversations', `${binding.nativeId}.db`) } : null
+}
+
+/**
+ * Model-streaming speed for the bound turn from agy's per-call timing. Every bound
+ * call must appear in the database with the same output count and a positive stream
+ * time; otherwise there is no decode figure and the whole-turn average stands alone.
+ */
+async function readDecode(bound: Bound, database: string): Promise<AgyDecode | null> {
+  const calls = await readGenCalls(database)
+  if (!calls) return null
+  let outputTokens = 0
+  let streamMs = 0
+  const first: number[] = []
+  for (const step of bound.steps) {
+    const call = calls.get(step.step)
+    if (!call || call.outputTokens !== step.outputTokens || call.streamMs === null) return null
+    outputTokens += call.outputTokens
+    streamMs += call.streamMs
+    if (call.firstTokenMs !== null) first.push(call.firstTokenMs)
+  }
+  // A sub-second stream is mostly one network burst; its ratio says little about decode speed.
+  if (outputTokens <= 0 || streamMs < MIN_STREAM_MS) return null
+  first.sort((a, b) => a - b)
+  const mid = first.length >> 1
+  const firstTokenMs = !first.length ? null : first.length % 2 ? first[mid] : (first[mid - 1] + first[mid]) / 2
+  return { outputTokens, streamMs, firstTokenMs, calls: bound.steps.length }
 }
 
 /**
@@ -319,14 +350,18 @@ async function readBound(record: unknown, turn: AgyTurn): Promise<Bound | null> 
  */
 export async function readAgyRate(record: unknown, turn: AgyTurn): Promise<ProviderRate | null> {
   try {
-    const bound = await readBound(record, turn)
-    if (!bound) return null
-    return {
+    const located = await readBound(record, turn)
+    if (!located) return null
+    const { bound } = located
+    const rate: ProviderRate = {
       scope: 'turn',
       outputTokens: bound.outputTokens,
       durationMs: bound.turn.durationMs,
       completedAt: bound.turn.completedAt
     }
+    // The decode figure is optional: any problem with the database leaves the average intact.
+    const decode = await readDecode(bound, located.database).catch(() => null)
+    return decode ? { ...rate, decode } : rate
   } catch {
     return null
   }
@@ -338,12 +373,13 @@ export async function readAgyRate(record: unknown, turn: AgyTurn): Promise<Provi
  * whole-second wall time, not a generation clock, and using adjacent steps as
  * a duration produces impossible speeds (a local sample showed 12,579 tokens
  * four seconds after the previous step, about 3,100 tok/s). Use this accessor
- * only as evidence for the aggregate count, never as a per-step timer.
+ * only as evidence for the aggregate count, never as a per-step timer. The real
+ * per-call timing comes from `gen_metadata`, see `readAgyRate().decode`.
  */
 export async function readAgySteps(record: unknown, turn: AgyTurn): Promise<AgyStep[] | null> {
   try {
-    const bound = await readBound(record, turn)
-    return bound ? bound.steps.map((step) => ({ ...step })) : null
+    const located = await readBound(record, turn)
+    return located ? located.bound.steps.map((step) => ({ ...step })) : null
   } catch {
     return null
   }

@@ -7,6 +7,7 @@
 | --- | --- | --- | --- | --- |
 | Orca Chat 指标来源 | 宿主支持状态栏与面板；首版用精确匹配的本地 transcript | active | 2026-11-25 | `orca-metrics.md` |
 | Antigravity 原生 Chat 吞吐 | Orca turn 边界 + agy 逐调用 output_tokens 可在精确绑定后给整轮平均；绑定不唯一则 null | active | 2026-11-25 | `agy-throughput.md` |
+| agy-context 插件参考 | 会话库 `gen_metadata` 有逐调用首字延迟与流式时长，本机核对通过，可做真实 tok/s；RPC 分类遥测需用户决定 | active | 2026-11-27 | `agy-context-plugin.md` |
 
 ## 状态说明
 

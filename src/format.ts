@@ -17,6 +17,9 @@ export const compact = (n: number): string => n < 1_000 ? String(n) : n < 999_95
 
 export function metrics(snapshot: Snapshot) {
   const { sample, context, windowTokens } = snapshot
+  const dc = snapshot.providerRate?.decode
+  const decode = dc ? { rate: `≈${(dc.outputTokens * 1000 / dc.streamMs).toFixed(1)} tok/s`, calls: dc.calls,
+    first: dc.firstTokenMs === null ? null : `${(dc.firstTokenMs / 1000).toFixed(2)} s` } : null
   const native = context && context.kind !== 'unknown' ? context : null
   const useNative = native && (!sample || native.capturedAt >= sample.completedAt)
   const used = useNative ? native.usedTokens
@@ -37,12 +40,12 @@ export function metrics(snapshot: Snapshot) {
     ? { at: native.capturedAt, categories: [...native.categories].sort((a, b) =>
       Number(!!a.deferred) - Number(!!b.deferred) || b.tokens - a.tokens) }
     : null
-  return { used, percent, rate, rateNote, tone, window, free, cache, breakdown, contextEstimated: useNative ? native.kind === 'estimate' : used !== null,
+  return { used, percent, rate, rateNote, decode, tone, window, free, cache, breakdown, contextEstimated: useNative ? native.kind === 'estimate' : used !== null,
     contextAt: useNative ? native.capturedAt : used !== null ? sample?.completedAt ?? null : null } as const
 }
 
 export function status(snapshot: Snapshot) {
-  const { used, rate, tone, window, contextEstimated } = metrics(snapshot)
+  const { used, rate, decode, tone, window, contextEstimated } = metrics(snapshot)
   const t = messages(snapshot.locale)
   const agent = snapshot.chats.find((chat) => chat.id === snapshot.selected)?.agent
   const context = used === null ? null : `${compact(used)}${window ? `/${compact(window)}` : ''}`
@@ -51,5 +54,6 @@ export function status(snapshot: Snapshot) {
   const detail = [agent ? agentLabel(agent) : 'Chat Gauge']
   if (used !== null) detail.push(`${t.contextTokens}：${count(used)}${window ? ` / ${count(window)}` : ` · ${t.windowUnknown}`}${contextEstimated ? ` · ${t.estimated}` : ''}`)
   if (rate) detail.push(`${t.throughput}：${rate}`, snapshot.providerRate ? rateCopy[snapshot.locale][snapshot.providerRate.scope] : t.lastRequest)
+  if (decode) detail.push(`${rateCopy[snapshot.locale].decode}：${decode.rate}`)
   return { text, tooltip: detail.join('\n'), tone }
 }
