@@ -9,6 +9,8 @@ updated: 2026-11-25
 
 - GitHub Release `v0.2.0`：响应式 HTML 侧栏、Claude 彩色上下文树图、缺数据提示和精简状态栏。发布前 28 个测试通过；UI 验证见 `docs/ui-v2.md`。
 
+- GitHub Release `v0.3.3`（提交 `1cb1d65`）：Antigravity 解码速度卡片。社区目录收录结果待到状态页核实。
+
 ## 多 Agent 开发版
 
 - `docs/multi-agent.md` 为当前支持矩阵。Windows 本机原生 Chat 的范围以 Orca 1.4.274 的 20 个 ACP 注册项与 3 个独立原生适配器为准。整轮计时与 token 吞吐独立。未支持远程、WSL、终端。
