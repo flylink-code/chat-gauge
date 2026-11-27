@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "chat-gauge",
   "name": "Chat Gauge",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Context usage and token throughput for local agent chats in Orca. 本机 Agent 对话的上下文用量与 token 吞吐。",
   "homepage": "https://github.com/flylink-code/chat-gauge",
   "icon": "assets/icon.png",

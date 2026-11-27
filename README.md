@@ -21,6 +21,7 @@ See local agents’ **context usage** in Orca’s status bar and right sidebar, 
 | Readout | Source and limitations |
 | --- | --- |
 | Average throughput | Output tokens ÷ approximate request duration, including time to first token. Updates when a completed usage record arrives; not a live decode rate. If a request start cannot be inferred, throughput is unavailable. |
+| Decode speed (Antigravity) | Output tokens ÷ summed model streaming time of the last completed turn, read from agy's own conversation database. Excludes first-token wait and tool time; shown only when every call matches the transcript and streaming lasted at least 1 s. |
 | Context used | The latest Orca context fact, or a Claude transcript estimate. It does not include the current draft. |
 | Context percentage | Relative to the reported window or a manual override. A custom endpoint’s window is never guessed from its model name. |
 | Claude context breakdown | Treemap areas follow reported occupied category counts; tile numbers match the detailed list. Free, reserved, and deferred categories are listed separately. |
